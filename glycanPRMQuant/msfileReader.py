@@ -113,3 +113,74 @@ def extractXIC(mzml_file, mz, ppm_tol = 10):
     data = pd.DataFrame(data)
 
     return data
+
+def extractMS2(mzml_file, min_intensity = 1):
+    """
+    This Python function extracts MS2 data from an mzML file based on a minimum intensity threshold.
+    
+    :param mzml_file: The `mzml_file` parameter in the `extractMS2` function is the path to the mzML
+    file from which you want to extract MS2 data. This function reads the mzML file, extracts MS2 data
+    (mass spectra with MS level 2), and returns a DataFrame containing
+    :param min_intensity: The `min_intensity` parameter in the `extractMS2` function is used to filter
+    out peaks with intensities below a certain threshold. Peaks with intensities lower than the
+    specified `min_intensity` value will not be included in the extracted MS2 data, defaults to 1
+    (optional)
+    :return: The function `extractMS2` returns a pandas DataFrame containing extracted MS2 data from the
+    provided mzML file. The DataFrame includes columns for scan number, m/z values, retention times,
+    intensities, total ion current (TIC), and base peak intensities.
+    """
+    scan_numbers = []
+    rts = []
+    precursor_mzs = []
+    fragment_mzs = []
+    precursor_intensities = []
+    fragment_intensities = []
+
+    with mzml.read(mzml_file) as reader:
+        for _, spectrum in enumerate(reader):
+            if spectrum.get('ms level', 0) == 2:
+                scan_number = spectrum.get('index') + 1
+                rt = spectrum.get('scanList', {}).get('scan', [{}])[0].get('scan start time')
+
+                precursor_mz = spectrum.get('precursorList', {}).get('precursor', [{}])[0].get('selectedIonList', {}).get('selectedIon', [{}])[0].get('selected ion m/z')
+                
+                # Extract precursor intensity with fallbacks
+                precursor_intensity = 0
+                try:
+                    precursor = spectrum.get('precursorList', {}).get('precursor', [{}])[0]
+                    selected_ion = precursor.get('selectedIonList', {}).get('selectedIon', [{}])[0]
+                    # Try different possible keys for intensity
+                    for key in ['intensity', 'selected ion intensity', 'peak intensity']:
+                        if key in selected_ion:
+                            precursor_intensity = selected_ion[key]
+                            break
+                except (IndexError, KeyError, TypeError):
+                    pass
+
+                mz_array = spectrum.get('m/z array', [])
+                intensity_array = spectrum.get('intensity array', [])
+
+                if len(mz_array) > 0:
+                    mask = np.array(intensity_array) > min_intensity
+                    filtered_mzs = np.array(mz_array)[mask]
+                    filtered_intensities = np.array(intensity_array)[mask]
+
+                    print(f'Processing scan {scan_number} with {len(filtered_mzs)} fragments')
+
+                    for frag_mz, frag_intensity in zip(filtered_mzs, filtered_intensities):
+                        scan_numbers.append(scan_number)
+                        rts.append(rt)
+                        precursor_mzs.append(precursor_mz)
+                        precursor_intensities.append(precursor_intensity)
+                        fragment_mzs.append(frag_mz)
+                        fragment_intensities.append(frag_intensity)
+    data = {
+        'scan_number': scan_numbers,
+        'rt': rts,
+        'precursor_mz': precursor_mzs,
+        'fragment_mz': fragment_mzs,
+        'precursor_intensity': precursor_intensities,
+        'fragment_intensity': fragment_intensities
+    }
+    data = pd.DataFrame(data)
+    return data
