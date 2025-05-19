@@ -1,7 +1,9 @@
 setup.py
 glycanPRMQuant/__init__.py
 glycanPRMQuant/centroidData.py
+glycanPRMQuant/glycanBuilder.py
 glycanPRMQuant/matchMS1.py
+glycanPRMQuant/matchMS2.py
 glycanPRMQuant/msPlotter.py
 glycanPRMQuant/msfileReader.py
 glycanPRMQuant.egg-info/PKG-INFO
@@ -12,3 +14,4 @@ glycanPRMQuant.egg-info/top_level.txt
 tests/__init__.py
 tests/test_extractMS1.py
 tests/test_matchMS1.py
+tests/test_yyfragmentation.py

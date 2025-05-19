@@ -350,7 +350,7 @@ def build_glycan(composition, glycan_type="N"):
     
     return G
 
-def visualize_glycan_snfg(G):
+def visualize_glycan_snfg(G, composition):
     """
     Visualize the glycan structure using Symbol Nomenclature for Glycans (SNFG).
     
