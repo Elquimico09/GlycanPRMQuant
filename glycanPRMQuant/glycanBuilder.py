@@ -1649,37 +1649,3 @@ def test_branch_detection(composition):
         'fragments': fragments,
         'fragment_info': fragment_info
     }
-
-
-# Example usage
-composition = (2, 3, 0, 0)  # HexNAc=3, Hex=5, Fuc=1, Neu5Ac=0
-results = test_branch_detection(composition)
-
-# Visualize the structure with branches highlighted
-fig = visualize_branches(results['glycan'], results['branch_points'], results['root_node'])
-plt.show()
-
-# 2. Build the glycan graph from the composition
-G = build_glycan(composition)
-G.nodes(data =True)
-
-# Visualize the glycan structure
-fig_2 = visualize_glycan_snfg(G)
-plt.show()
-
-# 3. Generate yy fragments
-fragments, fragment_info = fragment_glycans_yy(G, permethylation=True)
-
-# Generate regular fragments
-fragments_single = fragment_glycans(G, permethylation=True)
-
-# 4. Visualize the fragments
-fragment_images = visualize_fragments(fragments)
-
-
-
-for fragment_id in fragments:
-    print(f"Fragment {fragment_id} has mass {fragment_info[fragment_id]['mass']}")
-
-for fragment_id in fragments_single:
-    print(f"Fragment {fragment_id} has mass {fragments_single[fragment_id]['mass']}")
