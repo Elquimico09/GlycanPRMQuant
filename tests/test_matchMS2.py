@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
-import os
-import numpy as np
-from scipy import stats
-from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+from pyteomics import mzml
+from glycanPRMQuant.msfileReader import extractMS2
+from glycanPRMQuant.matchMS1 import matchMS1
 
+# First, let's define the Gaussian fit function that we created
 def gaussian_fit_mz_values(mz_values, intensities=None, plot=False):
     """
     Apply a Gaussian fit to a set of m/z values that should represent the same ion.
@@ -114,6 +115,7 @@ def gaussian_fit_mz_values(mz_values, intensities=None, plot=False):
         
         return center, std_dev
 
+# Define the preprocessing function
 def preprocess_ms2_data(ms2_extracted_data, mz_tol=0.02):
     """
     Preprocess MS2 data by grouping similar m/z values and applying Gaussian fits.
@@ -210,7 +212,7 @@ def preprocess_ms2_data(ms2_extracted_data, mz_tol=0.02):
     
     return result
 
-
+# Update the MS2 matching function
 def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
               mz_tol = 0.02, intensity_threshold = 1e2, ppm_tol = 10):
     """
@@ -234,7 +236,6 @@ def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
     # Load the MS2 database
     ms2_database_path = "database/fragment_database.csv"
     ms2_database = pd.read_csv(ms2_database_path)
-    ms2_database["Glycan"] = ms2_database["Glycan"].astype(str)
 
     # Filter MS2 database for the specific glycan composition
     ms2_database_filtered = ms2_database[ms2_database['Glycan'] == precursor_composition].copy()
@@ -286,6 +287,9 @@ def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
     # Combine all filtered MS2 data
     ms2_filtered_df = pd.concat(filtered_ms2_data, ignore_index=True)
     print(f"Found {len(ms2_filtered_df)} MS2 spectra matching precursor m/z for {precursor_composition}")
+    
+    # Preprocess MS2 data to group similar m/z values
+    ms2_filtered_df = preprocess_ms2_data(ms2_filtered_df, mz_tol=mz_tol/2)
     
     # Match fragment ions against the MS2 database
     matched_fragments = []
@@ -347,3 +351,34 @@ def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
         print(f"  - Matched {count} fragments with charge {charge}+")
     
     return matched_ms2_df
+
+# Now let's create the main test script
+if __name__ == "__main__":
+    # Define the paths
+    test_mzml_file = "sample_data/mzML/AZ_0_5ug_R1.mzML"
+    write_path = "sample_data/mzML/AZ_0_5ug_R1_matched.csv"
+    
+    # Extract MS2 data
+    print("Extracting MS2 data from mzML file...")
+    extracted_ms2_data = extractMS2(test_mzml_file, min_intensity=1e2)
+    print(f"Extracted {len(extracted_ms2_data)} MS2 data points")
+    
+    # Match MS1 data
+    print("Matching MS1 data...")
+    matched_results = matchMS1(extracted_ms2_data, ppm_tol=10, mz_min=400, mz_max=2000)
+    print(f"Found {len(matched_results)} matched MS1 precursors")
+    
+    # Match MS2 data with the updated function
+    print("Matching MS2 data with Gaussian fitting...")
+    matched_ms2 = matchMS2(
+        extracted_ms2_data, 
+        matched_results, 
+        precursor_composition="25000", 
+        mz_tol=0.02, 
+        intensity_threshold=1e2, 
+        ppm_tol=10
+    )
+    
+    # Save the results
+    matched_ms2.to_csv(write_path, index=False)
+    print(f"Matched MS2 data saved to {write_path}")

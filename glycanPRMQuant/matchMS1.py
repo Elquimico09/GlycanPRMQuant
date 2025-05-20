@@ -89,7 +89,7 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000):
     # Create a result row with just the precursor m/z and matched compositions
     result_row = {
       'precursor_mz': precursor_mz,
-      'matched_compositions': matched_compositions
+      'Glycan': matched_compositions
     }
     unique_results.append(result_row)
   
