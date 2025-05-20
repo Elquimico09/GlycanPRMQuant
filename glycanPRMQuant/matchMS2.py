@@ -19,4 +19,9 @@ def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
         # Load the MS2 database
         ms2_database_path = "database/fragment_database.csv"
         ms2_database = pd.read_csv(ms2_database_path)
-        print(f"Loaded MS2 database with {len(ms2_database)} entries")
+
+        ms2_database_filtered = ms2_database[ms2_database['Glycan'] == precursor_composition]
+        print(f"Loaded MS2 database with {len(ms2_database_filtered)} entries for {precursor_composition}")
+
+        # precursor_matched_dat
+        

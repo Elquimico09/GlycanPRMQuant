@@ -1,26 +1,27 @@
-from glycanPRMQuant.glycanBuilder import fragment_glycans_yy, fragment_glycans, build_glycan, visualize_glycan_snfg, get_glycan_name, calculate_mass
+from glycanPRMQuant.glycanBuilder import fragment_glycans_yy, fragment_glycans, build_glycan, visualize_glycan_snfg, get_glycan_name, calculate_mass, visualize_fragments
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-glycan_test = (2, 9, 0, 0)          # HexNAc, Hex, Fuc, Neu5Ac
-G = build_glycan(glycan_test)
+# Example usage
+composition = (2, 9, 0, 0) 
 
-fig = visualize_glycan_snfg(G, glycan_test)  # returns a Figure
-#plt.show()
-mass = calculate_mass(glycan_test, permethylation=True)
-print("Mass of the glycan:", mass)
+# 2. Build the glycan graph from the composition
+G = build_glycan(composition)
+G.nodes(data =True)
 
-frags = fragment_glycans_yy(G, permethylation=True)      # G is your full glycan graph
+# Visualize the glycan structure
+fig = visualize_glycan_snfg(G, composition=composition)
+plt.show()
 
-print(f"Total fragments: {len(frags)}")
-print("First 5 IDs:", list(frags)[:5])
+# 3. Generate yy fragments
+fragments, fragment_info = fragment_glycans_yy(G, permethylation=True)
 
-from pprint import pprint
+# Generate regular fragments
+fragments_single = fragment_glycans(G, permethylation=True)
 
-frags_all = fragment_glycans_yy(G)      # outer list/tuple
-frags = frags_all[0]                    # the actual dict of fragments
+for fragment_id in fragments:
+    print(f"Fragment {fragment_id} has mass {fragment_info[fragment_id]['mass']}")
 
-# now this works:
-for fid, info in frags.items():
-    print(fid, info["mass"])
+for fragment_id in fragments_single:
+    print(f"Fragment {fragment_id} has mass {fragments_single[fragment_id]['mass']}")
