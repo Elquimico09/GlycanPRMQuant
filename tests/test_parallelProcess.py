@@ -9,7 +9,7 @@ if __name__ == '__main__':
         input_dir="sample_data/mzML",
         output_root="sample_data/results_parallel",
         n_workers=8,
-        ppm_ms1_tol=10,
+        ppm_ms1_tol=40,
         mz_min=400,
         mz_max=2000,
         intensity_threshold=1e2,
