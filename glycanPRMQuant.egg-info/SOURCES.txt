@@ -6,6 +6,9 @@ glycanPRMQuant/matchMS1.py
 glycanPRMQuant/matchMS2.py
 glycanPRMQuant/msPlotter.py
 glycanPRMQuant/msfileReader.py
+glycanPRMQuant/parallelProcess.py
+glycanPRMQuant/plotFragmentIntensity.py
+glycanPRMQuant/processmzML.py
 glycanPRMQuant.egg-info/PKG-INFO
 glycanPRMQuant.egg-info/SOURCES.txt
 glycanPRMQuant.egg-info/dependency_links.txt
@@ -15,4 +18,7 @@ tests/__init__.py
 tests/test_extractMS1.py
 tests/test_matchMS1.py
 tests/test_matchMS2.py
+tests/test_parallelProcess.py
+tests/test_plotfragmentintensity.py
+tests/test_processmzML.py
 tests/test_yyfragmentation.py
