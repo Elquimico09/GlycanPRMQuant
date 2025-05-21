@@ -1,59 +1,54 @@
 import numpy as np
 import pandas as pd
-from scipy.signal import find_peaks
-from scipy.optimize import curve_fit
-import warnings
-  
-def gaussian_fit(data, resolution = 120000):
+
+def gaussian_fit(data, mz_col='mz', intensity_col='intensity', resolution=120000):
     """
-    The function `gaussian_fit` takes input data with scan number, m/z, and intensity columns, fits
-    Gaussian peaks to the data, and returns a reconstructed spectrum DataFrame.
-    
-    :param data: The `data` parameter is expected to be a DataFrame containing information about peaks
-    in a mass spectrometry experiment. The DataFrame should have columns named 'scan_number', 'mz', and
-    'intensity' which represent the scan number, mass-to-charge ratio, and intensity of each peak
-    respectively
-    :param resolution: The `resolution` parameter in the `gaussian_fit` function determines the
-    resolution of the Gaussian peaks that will be generated based on the input data. It is used to
-    calculate the full width at half maximum (FWHM) of the Gaussian peaks. A higher resolution value
-    will result in narrower Gaussian peaks, defaults to 120000 (optional)
-    :return: The function `gaussian_fit` returns a DataFrame containing the reconstructed spectrum with
-    columns 'mz' and 'intensity'.
+    Reconstruct a mass spectrum by fitting Gaussian peaks to each (m/z, intensity) pair.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Must contain columns:
+        - scan_number
+        - <mz_col>           # name of the m/z column
+        - <intensity_col>    # name of the intensity column
+    mz_col : str, optional
+        Name of the column in `data` holding the m/z values. Default is 'mz'.
+    intensity_col : str, optional
+        Name of the column in `data` holding the peak intensities. Default is 'intensity'.
+    resolution : float, optional
+        Instrument resolution used to compute FWHM of peaks
+        (FWHM = mz / resolution). Default is 120000.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Two columns:
+        - 'mz': uniformly spaced m/z grid
+        - 'intensity': reconstructed spectrum
     """
-    
-    columns_required = ['scan_number', 'mz', 'intensity']
-    if not all(col in data.columns for col in columns_required):
-        raise ValueError('Input DataFrame must contain columns: scan_number, mz, intensity')
-    
-    # Decide on an mz grid
-    mz_min = data['mz'].min() - 1
-    mz_max = data['mz'].max() + 1
+    # Check for required columns
+    required = {'scan_number', mz_col, intensity_col}
+    missing = required - set(data.columns)
+    if missing:
+        raise ValueError(f"Input DataFrame is missing columns: {missing}")
+
+    # Build the m/z grid
+    mz_min = data[mz_col].min() - 1
+    mz_max = data[mz_col].max() + 1
     num_points = 20000
     mz_grid = np.linspace(mz_min, mz_max, num_points)
 
-    # Prepare an array to hold the summed spectrum
+    # Initialize spectrum
     reconstructed = np.zeros_like(mz_grid)
 
-    # Build each gaussian peak and accumulate
-    for idx, row in data.iterrows():
-        mz_center = row['mz']
-        intensity = row['intensity']
-
-        fwhm = mz_center / resolution
-
-        # convert FWHM to sigma for Gaussian
-        sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-
-        # Build the gaussian peak
-        peak = intensity * np.exp(-0.5 * ((mz_grid - mz_center) / sigma) ** 2)
-
-        # Add to the reconstructed spectrum
+    # Sum Gaussian peaks
+    for _, row in data.iterrows():
+        center = row[mz_col]
+        height = row[intensity_col]
+        fwhm = center / resolution
+        sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
+        peak = height * np.exp(-0.5 * ((mz_grid - center) / sigma) ** 2)
         reconstructed += peak
 
-    # Create a DataFrame for the reconstructed spectrum
-    reconstructed_df = pd.DataFrame({
-        'mz': mz_grid,
-        'intensity': reconstructed
-    })
-
-    return reconstructed_df
+    return pd.DataFrame({'mz': mz_grid, 'intensity': reconstructed})
