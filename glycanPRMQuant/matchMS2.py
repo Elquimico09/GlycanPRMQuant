@@ -1,216 +1,58 @@
 import pandas as pd
 import numpy as np
-import os
-import numpy as np
-from scipy import stats
-from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
+from pyteomics import mzml
+from sklearn.cluster import DBSCAN
 
-def gaussian_fit_mz_values(mz_values, intensities=None, plot=False):
+def preprocess_ms2_data(ms2_extracted_data, mz_tol=0.1):
     """
-    Apply a Gaussian fit to a set of m/z values that should represent the same ion.
-    
-    Parameters:
-    -----------
-    mz_values : array-like
-        A list or array of m/z values for the same ion.
-    intensities : array-like, optional
-        Corresponding intensity values. If None, all points are weighted equally.
-    plot : bool, optional
-        If True, create a plot of the data and the Gaussian fit.
-        
-    Returns:
-    --------
-    center : float
-        The center of the Gaussian fit (mean).
-    std_dev : float
-        The standard deviation of the Gaussian fit.
-    """
-    # Convert to numpy arrays if needed
-    mz_values = np.array(mz_values)
-    
-    # If no intensities are provided, assume equal weights
-    if intensities is None:
-        weights = None
-        intensities = np.ones_like(mz_values)
-    else:
-        intensities = np.array(intensities)
-        # Normalize weights to sum to 1
-        weights = intensities / np.sum(intensities)
-    
-    # Define Gaussian function
-    def gaussian(x, mean, sigma, amplitude):
-        return amplitude * np.exp(-(x - mean)**2 / (2 * sigma**2))
-    
-    # Initial guesses for parameters
-    # Use weighted statistics if weights are provided
-    if weights is not None:
-        mean_guess = np.average(mz_values, weights=weights)
-        # Calculate weighted variance
-        variance = np.average((mz_values - mean_guess)**2, weights=weights)
-        sigma_guess = np.sqrt(variance)
-    else:
-        mean_guess = np.mean(mz_values)
-        sigma_guess = np.std(mz_values)
-    
-    amplitude_guess = np.max(intensities)
-    
-    # Perform the curve fit
-    try:
-        popt, pcov = curve_fit(gaussian, mz_values, intensities, 
-                               p0=[mean_guess, sigma_guess, amplitude_guess],
-                               sigma=None if weights is None else 1/np.sqrt(weights+1e-10),
-                               absolute_sigma=True)
-        
-        center, std_dev, amplitude = popt
-        
-        # Create a plot if requested
-        if plot:
-            plt.figure(figsize=(10, 6))
-            
-            # Plot the original data points
-            plt.scatter(mz_values, intensities, color='blue', label='Observed m/z values')
-            
-            # Plot the Gaussian fit
-            x_fit = np.linspace(min(mz_values), max(mz_values), 1000)
-            y_fit = gaussian(x_fit, center, std_dev, amplitude)
-            plt.plot(x_fit, y_fit, 'r-', label=f'Gaussian fit (μ={center:.6f}, σ={std_dev:.6f})')
-            
-            # Add vertical line at the center
-            plt.axvline(x=center, color='green', linestyle='--', 
-                       label=f'Center: {center:.6f}')
-            
-            plt.xlabel('m/z')
-            plt.ylabel('Intensity')
-            plt.title('Gaussian Fit of m/z Values')
-            plt.legend()
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.show()
-        
-        return center, std_dev
-    
-    except RuntimeError:
-        print("Error: Curve fitting failed. Using median and MAD instead.")
-        center = np.median(mz_values)
-        # Calculate Median Absolute Deviation (MAD)
-        mad = np.median(np.abs(mz_values - center))
-        # Convert MAD to standard deviation (assuming normal distribution)
-        std_dev = mad * 1.4826
-        
-        # Create a plot if requested
-        if plot:
-            plt.figure(figsize=(10, 6))
-            plt.scatter(mz_values, intensities, color='blue', label='Observed m/z values')
-            plt.axvline(x=center, color='red', linestyle='--', 
-                       label=f'Median: {center:.6f}')
-            plt.xlabel('m/z')
-            plt.ylabel('Intensity')
-            plt.title('Median of m/z Values (Gaussian Fit Failed)')
-            plt.legend()
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.show()
-        
-        return center, std_dev
+    Preprocess MS2 data by clustering fragment m/z values within mz_tol,
+    taking the average m/z per cluster, and summing intensities.
 
-def preprocess_ms2_data(ms2_extracted_data, mz_tol=0.02):
-    """
-    Preprocess MS2 data by grouping similar m/z values and applying Gaussian fits.
-    
-    Parameters:
-    -----------
-    ms2_extracted_data : DataFrame
-        DataFrame containing MS2 data with fragment_mz and fragment_intensity columns.
+    Parameters
+    ----------
+    ms2_extracted_data : pandas.DataFrame
+        Must contain columns:
+            ['scan_number', 'precursor_mz', 
+             'fragment_mz', 'fragment_intensity']
     mz_tol : float, optional
-        Tolerance for grouping m/z values (in Da).
-        
-    Returns:
-    --------
-    processed_data : DataFrame
-        Processed MS2 data with consolidated m/z values.
+        Mass tolerance in Da for clustering fragment m/z values.
+        Default is 0.02 Da.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Consolidated MS2 data with:
+        - fragment_mz = mean cluster m/z
+        - fragment_intensity = summed intensities per cluster
     """
-    # Make a copy to avoid modifying the original data
-    processed_data = ms2_extracted_data.copy()
-    
-    # Group the data by scan_number and precursor_mz
-    grouped = processed_data.groupby(['scan_number', 'precursor_mz'])
-    
-    result_dfs = []
-    
-    for (scan, precursor), group in grouped:
-        # Sort by fragment_mz
-        group = group.sort_values('fragment_mz')
-        
-        # Initialize variables for grouping
-        current_group_mzs = []
-        current_group_intensities = []
-        current_group_indices = []
-        
-        # Process each row
-        for i, row in group.iterrows():
-            mz = row['fragment_mz']
-            intensity = row['fragment_intensity']
-            
-            # If this is the first point or it's close to the previous group
-            if not current_group_mzs or abs(mz - current_group_mzs[-1]) <= mz_tol:
-                current_group_mzs.append(mz)
-                current_group_intensities.append(intensity)
-                current_group_indices.append(i)
-            else:
-                # Process the current group if it has at least 1 point
-                if len(current_group_mzs) >= 1:
-                    # If there's only one point, keep it as is
-                    if len(current_group_mzs) == 1:
-                        # No need to modify this single point
-                        pass
-                    else:
-                        # Apply Gaussian fit to multiple points
-                        center, _ = gaussian_fit_mz_values(current_group_mzs, current_group_intensities)
-                        
-                        # Update the m/z values for all points in this group
-                        for idx in current_group_indices:
-                            processed_data.at[idx, 'fragment_mz'] = center
-                
-                # Start a new group
-                current_group_mzs = [mz]
-                current_group_intensities = [intensity]
-                current_group_indices = [i]
-        
-        # Process the last group
-        if len(current_group_mzs) > 1:
-            center, _ = gaussian_fit_mz_values(current_group_mzs, current_group_intensities)
-            for idx in current_group_indices:
-                processed_data.at[idx, 'fragment_mz'] = center
-    
-    # Now consolidate rows with identical fragment_mz values (after Gaussian fitting)
-    consolidated = []
-    
-    for (scan, precursor), group in processed_data.groupby(['scan_number', 'precursor_mz']):
-        # Find unique fragment_mz values after fitting
-        unique_mzs = group['fragment_mz'].unique()
-        
-        for unique_mz in unique_mzs:
-            # Get all rows with this m/z
-            same_mz_rows = group[group['fragment_mz'] == unique_mz]
-            
-            # Sum the intensities
-            total_intensity = same_mz_rows['fragment_intensity'].sum()
-            
-            # Take the first row and update the intensity
-            consolidated_row = same_mz_rows.iloc[0].copy()
-            consolidated_row['fragment_intensity'] = total_intensity
-            
-            consolidated.append(consolidated_row)
-    
-    # Create the consolidated DataFrame
-    result = pd.DataFrame(consolidated)
-    
-    print(f"Preprocessed MS2 data: reduced from {len(ms2_extracted_data)} to {len(result)} fragment ions after grouping similar m/z values")
-    
+    df = ms2_extracted_data.copy()
+    result_rows = []
+
+    # Process each spectrum separately
+    for (scan, precursor), group in df.groupby(['scan_number', 'precursor_mz']):
+        # cluster on the fragment_mz column
+        mz_array = group['fragment_mz'].values.reshape(-1, 1)
+        clustering = DBSCAN(eps=mz_tol, min_samples=1).fit(mz_array)
+        group = group.assign(cluster=clustering.labels_)
+
+        # for each cluster, compute mean m/z and summed intensity
+        for cid, sub in group.groupby('cluster'):
+            mean_mz = sub['fragment_mz'].mean()
+            total_intensity = sub['fragment_intensity'].sum()
+            # take one representative row and overwrite m/z & intensity
+            row = sub.iloc[0].copy()
+            row['fragment_mz'] = mean_mz
+            row['fragment_intensity'] = total_intensity
+            result_rows.append(row)
+
+    result = pd.DataFrame(result_rows).reset_index(drop=True)
+    print(f"Preprocessed MS2 data: reduced from "
+          f"{len(ms2_extracted_data)} to {len(result)} fragment ions.")
     return result
 
 
+# Update the MS2 matching function
 def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
               mz_tol = 0.02, intensity_threshold = 1e2, ppm_tol = 10):
     """
@@ -234,7 +76,7 @@ def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
     # Load the MS2 database
     ms2_database_path = "database/fragment_database.csv"
     ms2_database = pd.read_csv(ms2_database_path)
-    ms2_database["Glycan"] = ms2_database["Glycan"].astype(str)
+    ms2_database['Glycan'] = ms2_database['Glycan'].astype(str)
 
     # Filter MS2 database for the specific glycan composition
     ms2_database_filtered = ms2_database[ms2_database['Glycan'] == precursor_composition].copy()
@@ -286,6 +128,9 @@ def matchMS2(ms2_extracted_data, precursor_matched_data, precursor_composition,
     # Combine all filtered MS2 data
     ms2_filtered_df = pd.concat(filtered_ms2_data, ignore_index=True)
     print(f"Found {len(ms2_filtered_df)} MS2 spectra matching precursor m/z for {precursor_composition}")
+    
+    # Preprocess MS2 data to group similar m/z values
+    ms2_filtered_df = preprocess_ms2_data(ms2_filtered_df, mz_tol=0.1)
     
     # Match fragment ions against the MS2 database
     matched_fragments = []
