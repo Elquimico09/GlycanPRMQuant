@@ -8,6 +8,7 @@ glycanPRMQuant/msPlotter.py
 glycanPRMQuant/msfileReader.py
 glycanPRMQuant/parallelProcess.py
 glycanPRMQuant/plotFragmentIntensity.py
+glycanPRMQuant/plotMS2spectrum.py
 glycanPRMQuant/processmzML.py
 glycanPRMQuant.egg-info/PKG-INFO
 glycanPRMQuant.egg-info/SOURCES.txt
