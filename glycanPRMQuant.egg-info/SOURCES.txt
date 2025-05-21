@@ -16,6 +16,7 @@ glycanPRMQuant.egg-info/dependency_links.txt
 glycanPRMQuant.egg-info/requires.txt
 glycanPRMQuant.egg-info/top_level.txt
 tests/__init__.py
+tests/test_MS2spectrum.py
 tests/test_extractMS1.py
 tests/test_matchMS1.py
 tests/test_matchMS2.py
