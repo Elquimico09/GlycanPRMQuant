@@ -22,35 +22,15 @@ def process_mzml_pipeline(
 ):
     """
     Full MS1→MS2 pipeline for one .mzML file, using built-in glycan DBs,
-    and saves per-glycan MS2 plots into output_dir/images/.
-
-    Parameters
-    ----------
-    mzml_file : str
-        Path to the .mzML file to process.
-    output_dir : str
-        Directory where results (CSVs + images/) will be written.
-    ppm_ms1_tol : float
-        Tolerance (ppm) for MS1 precursor matching.
-    mz_min : float
-        Minimum m/z to consider in MS1.
-    mz_max : float
-        Maximum m/z to consider in MS1.
-    intensity_threshold : float
-        Minimum fragment intensity for MS2 extraction.
-    ppm_ms2_tol : float
-        Tolerance (ppm) for filtering MS2 scans by precursor m/z.
-    mz_tol : float
-        Absolute Da tolerance for fragment-ion matching in MS2.
-    smoothing_window : int
-        Window size (in scans) for the moving‐average smoothing on the fragment traces.
+    and saves per-glycan MS2 plots into output_dir/images/, showing only
+    the top 3 fragments plus a total-fragment line.
     """
     os.makedirs(output_dir, exist_ok=True)
     images_dir = os.path.join(output_dir, 'images')
     os.makedirs(images_dir, exist_ok=True)
 
     # 1) Extract all MS2 scans
-    print(f"Extracting MS2 data (min_intensity={intensity_threshold})…")
+    print(f"Extracting MS2 data from {mzml_file} (min_intensity={intensity_threshold})…")
     ms2_data = extractMS2(mzml_file, min_intensity=intensity_threshold)
     print(f" → Extracted {len(ms2_data)} MS2 points.")
 
@@ -98,8 +78,7 @@ def process_mzml_pipeline(
         matched_ms2.to_csv(csv_path, index=False)
         print(f"  → Wrote {len(matched_ms2)} MS2 matches to {csv_path}")
 
-        # now plot & save
-        #  a) aggregate by scan_number, rt, Fragment
+        # aggregate by scan_number, rt, Fragment
         agg = (
             matched_ms2
             .groupby(['scan_number', 'rt', 'Fragment'])
@@ -109,32 +88,46 @@ def process_mzml_pipeline(
             )
             .reset_index()
         )
-        #  b) pivot to RT × Fragment
+        # pivot to RT × Fragment
         pivot = agg.pivot(index='rt', columns='Fragment', values='sum_intensity').fillna(0)
-        #  c) smooth
+        # smooth
         pivot_smoothed = pivot.rolling(window=smoothing_window, center=True, min_periods=1).mean()
 
-        #  d) build labels
-        mean_mz_map = agg.groupby('Fragment')['mean_mz'].first().to_dict()
-        labels = {frag: f"{frag} ({mean_mz_map[frag]:.4f})" for frag in pivot_smoothed.columns}
+        # determine top 3 most intense fragments (by total unsmoothed intensity)
+        top3 = pivot.sum(axis=0).nlargest(3).index.tolist()
 
-        #  e) plot
+        # compute total intensity across all fragments per RT
+        total_per_rt = pivot_smoothed.sum(axis=1)
+
+        # build labels
+        mean_mz_map = agg.groupby('Fragment')['mean_mz'].first().to_dict()
+        labels = {frag: f"{frag} ({mean_mz_map[frag]:.4f})" for frag in top3}
+
+        # plot
         fig, ax = plt.subplots(figsize=(10, 6))
-        for frag in sorted(pivot_smoothed.columns):
+        for frag in top3:
             ax.plot(
                 pivot_smoothed.index,
                 pivot_smoothed[frag],
                 label=labels[frag],
                 linewidth=2
             )
+        # plot total
+        ax.plot(
+            total_per_rt.index,
+            total_per_rt.values,
+            linestyle='--',
+            label='Total Intensity',
+            linewidth=2
+        )
         ax.set_xlabel('Retention Time (RT)')
         ax.set_ylabel('Smoothed Summed Fragment Intensity')
-        ax.set_title(f'Glycan {glycan}: Fragment Chromatograms (MA window={smoothing_window})')
+        ax.set_title(f'Glycan {glycan}: Top 3 Fragments + Total (MA window={smoothing_window})')
         ax.legend(title='Fragment (mean m/z)', bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(alpha=0.3)
         fig.tight_layout()
 
-        #  f) save figure
+        # save figure
         img_path = os.path.join(images_dir, f"ms2_{glycan}.png")
         fig.savefig(img_path)
         plt.close(fig)
