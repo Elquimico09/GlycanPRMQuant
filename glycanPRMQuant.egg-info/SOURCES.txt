@@ -2,12 +2,14 @@ setup.py
 glycanPRMQuant/__init__.py
 glycanPRMQuant/calculateAUC.py
 glycanPRMQuant/centroidData.py
+glycanPRMQuant/consolidateAUC.py
 glycanPRMQuant/glycanBuilder.py
 glycanPRMQuant/matchMS1.py
 glycanPRMQuant/matchMS2.py
 glycanPRMQuant/msPlotter.py
 glycanPRMQuant/msfileReader.py
 glycanPRMQuant/parallelProcess.py
+glycanPRMQuant/performPCA.py
 glycanPRMQuant/plotFragmentIntensity.py
 glycanPRMQuant/plotMS2spectrum.py
 glycanPRMQuant/processmzML.py
@@ -19,10 +21,12 @@ glycanPRMQuant.egg-info/top_level.txt
 tests/__init__.py
 tests/test_MS2spectrum.py
 tests/test_calculateAUC.py
+tests/test_consolidateAUC.py
 tests/test_extractMS1.py
 tests/test_matchMS1.py
 tests/test_matchMS2.py
 tests/test_parallelProcess.py
+tests/test_performPCA2D.py
 tests/test_plotfragmentintensity.py
 tests/test_processmzML.py
 tests/test_yyfragmentation.py
