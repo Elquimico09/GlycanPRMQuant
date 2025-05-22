@@ -15,5 +15,6 @@ if __name__ == '__main__':
         intensity_threshold=1e2,
         ppm_ms2_tol=20,
         mz_tol=0.05,
-        smoothing_window=0
+        smoothing_window=0,
+        mass_offset=1.0
     )
