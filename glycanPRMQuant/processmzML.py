@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.ndimage import gaussian_filter1d
 
 from glycanPRMQuant.msfileReader import extractMS2
 from glycanPRMQuant.matchMS1 import matchMS1
@@ -103,7 +104,10 @@ def process_mzml_pipeline(
         )
         pivot = agg.pivot(index='rt', columns='Fragment', values='sum_intensity').fillna(0)
         if smoothing_window > 0:
-            pivot_smoothed = pivot.rolling(window=smoothing_window, center=True, min_periods=1).mean()
+            pivot_smoothed = pivot.apply(
+                lambda x: gaussian_filter1d(x, sigma=smoothing_window, mode='nearest'),
+                axis=0
+            )
         else:
             pivot_smoothed = pivot
 
