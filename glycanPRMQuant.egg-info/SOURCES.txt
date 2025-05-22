@@ -4,6 +4,7 @@ glycanPRMQuant/calculateAUC.py
 glycanPRMQuant/centroidData.py
 glycanPRMQuant/consolidateAUC.py
 glycanPRMQuant/glycanBuilder.py
+glycanPRMQuant/intensityBarplot.py
 glycanPRMQuant/matchMS1.py
 glycanPRMQuant/matchMS2.py
 glycanPRMQuant/msPlotter.py
