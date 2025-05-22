@@ -1,78 +1,97 @@
 import pandas as pd
+import numpy as np
 
-def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.02):
+def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_offset=0.0):
     """
-    Match MS1 data with glycan database, optionally offsetting all database m/z values.
+    Match MS1 data with glycan database by computing adduct m/z values
+    from the neutral mass column 'M'. Supports +2H, +3H, +4H, +H+NH4+, and +2NH4 adducts.
 
     :param ms1_data: DataFrame containing MS1 data with 'precursor_mz' column.
     :param ppm_tol: Mass tolerance in parts per million.
-    :param mz_min: Minimum m/z value to consider (default: 400).
-    :param mz_max: Maximum m/z value to consider (default: 2000).
-    :param mz_offset: Amount (in Da) to add to all database m/z values before matching.
-    :return: DataFrame with matched MS1 data and corresponding glycan information.
+    :param mz_min: Minimum m/z value to consider.
+    :param mz_max: Maximum m/z value to consider.
+    :param mz_offset: Amount (in Da) to add to all calculated adduct m/z values.
+    :return: DataFrame with columns ['precursor_mz','Glycan'].
     """
-    print(f"Starting MS1 matching with ppm tolerance: {ppm_tol}")
+    PROTON_MASS = 1.007276
+    NH4_MASS   = 18.033825
+
+
+        
+
+    print(f"Starting MS1 matching with ±{ppm_tol} ppm tolerance")
     print("Loading glycan database...")
-    glycan_database = pd.read_excel("database/glycan_precursor_mz_list.xlsx")
-    print(f"Loaded glycan database with {len(glycan_database)} entries")
+    db = pd.read_excel("database/glycan_precursor_mz_list.xlsx")
+    print(f"Loaded {len(db)} glycan entries")
 
-    # Identify adduct columns
-    adduct_columns = [
-        col for col in glycan_database.columns
-        if col.startswith('[M+') and col.endswith('+')
-    ]
-    print(f"Found {len(adduct_columns)} adduct columns: {adduct_columns}")
+    if mass_offset != 0.0:
+        print(f"Applying mass offset of {mass_offset} Da to all Glycans")
+        db['M'] = db['M'] + mass_offset
+        
 
-    # Apply mz_offset if specified
-    if mz_offset != 0:
-        print(f"Applying m/z offset of {mz_offset} Da to all database values")
-        glycan_database[adduct_columns] = glycan_database[adduct_columns] + mz_offset
+    # Compute adduct m/z values from neutral mass 'M'
+    db = db.copy()
+    db['mz_2H']     = (db['M'] + 2*PROTON_MASS)    / 2
+    db['mz_3H']     = (db['M'] + 3*PROTON_MASS)    / 3
+    db['mz_4H']     = (db['M'] + 4*PROTON_MASS)    / 4
+    db['mz_H_NH4']  = (db['M'] + PROTON_MASS + NH4_MASS) / 2
+    db['mz_2NH4']   = (db['M'] + 2*NH4_MASS)        / 2
 
-    # Filter MS1 data to only include precursors within the specified m/z range
-    print(f"Filtering MS1 data with m/z range {mz_min}-{mz_max}...")
-    filtered_ms1 = ms1_data[
+    adduct_cols = ['mz_2H','mz_3H','mz_4H','mz_H_NH4','mz_2NH4']
+    adduct_labels = {
+        'mz_2H':    '2H',
+        'mz_3H':    '3H',
+        'mz_4H':    '4H',
+        'mz_H_NH4': 'H+NH4',
+        'mz_2NH4':  '2NH4'
+    }
+
+    # Apply global offset if requested
+    if mz_offset:
+        print(f"Applying m/z offset of {mz_offset} Da to all adducts")
+        db[adduct_cols] = db[adduct_cols] + mz_offset
+
+    # Filter MS1 data to m/z range
+    ms1 = ms1_data[
         (ms1_data['precursor_mz'] >= mz_min) &
         (ms1_data['precursor_mz'] <= mz_max)
     ]
-    print(f"Filtered MS1 data: {len(filtered_ms1)} entries (from {len(ms1_data)} total)")
+    print(f"Filtered MS1 to {len(ms1)} scans in {mz_min}-{mz_max} m/z")
 
-    # Get unique precursor m/z values
-    unique_precursors = filtered_ms1['precursor_mz'].unique()
-    print(f"Found {len(unique_precursors)} unique precursor m/z values")
+    unique_prec = ms1['precursor_mz'].unique()
+    print(f"{len(unique_prec)} unique precursor m/z values to match")
 
-    precursor_matches = {}
-    match_count = 0
+    matches = {}
+    total_matches = 0
 
-    # Matching loop
-    print("Starting matching process...")
-    for i, prec in enumerate(unique_precursors):
-        if i and i % 100 == 0:
-            print(f"  Processed {i}/{len(unique_precursors)} precursors, {match_count} matches so far")
+    for i, prec in enumerate(unique_prec, 1):
+        if i % 100 == 0:
+            print(f"  Processed {i}/{len(unique_prec)} precursors, {total_matches} matches so far")
         tol = prec * ppm_tol / 1e6
 
-        for adduct_col in adduct_columns:
-            # find rows where (database_mz ± tol) contains prec
-            hits = glycan_database[
-                (glycan_database[adduct_col] >= prec - tol) &
-                (glycan_database[adduct_col] <= prec + tol)
+        for col in adduct_cols:
+            # vectorized filter
+            hits = db[
+                (db[col] >= prec - tol) &
+                (db[col] <= prec + tol)
             ]
-            for _, hit in hits.iterrows():
-                precursor_matches.setdefault(prec, []).append({
-                    'matched_glycan': str(hit.get('Composition', '')),
-                    'matched_adduct': adduct_col,
-                    'database_mz': hit[adduct_col],
-                    'ppm_error': ((prec - hit[adduct_col]) / hit[adduct_col]) * 1e6
+            for _, row in hits.iterrows():
+                matches.setdefault(prec, []).append({
+                    'matched_glycan': str(row['Composition']),
+                    'matched_adduct': adduct_labels[col],
+                    'database_mz': row[col],
+                    'ppm_error': (prec - row[col]) / row[col] * 1e6
                 })
-                match_count += 1
+                total_matches += 1
 
-    print(f"Matching completed. {len(precursor_matches)} precursors had matches, total {match_count} matches.")
+    print(f"Matching complete: {len(matches)} precursors with matches, {total_matches} total matches")
 
-    # Build final DataFrame
-    unique_results = []
-    for prec, matches in precursor_matches.items():
-        comps = '; '.join(m['matched_glycan'] for m in matches)
-        unique_results.append({'precursor_mz': prec, 'Glycan': comps})
+    # Build result DataFrame
+    results = []
+    for prec, lst in matches.items():
+        glycans = '; '.join(m['matched_glycan'] for m in lst)
+        results.append({'precursor_mz': prec, 'Glycan': glycans})
 
-    result_df = pd.DataFrame(unique_results)
-    print(f"Final matched results: {len(result_df)} entries")
-    return result_df
+    df_out = pd.DataFrame(results)
+    print(f"Returning {len(df_out)} matched MS1 entries")
+    return df_out

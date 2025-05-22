@@ -19,7 +19,9 @@ def process_mzml_pipeline(
     intensity_threshold: float = 1e2,
     ppm_ms2_tol: float = 10,
     mz_tol: float = 0.02,
-    smoothing_window: int = 20
+    smoothing_window: int = 20,
+    mz_offset: float = 0.0,
+    mass_offset: float = 0.0,
 ):
     """
     Full MS1→MS2 pipeline for one .mzML file, using built-in glycan DBs,
@@ -45,7 +47,8 @@ def process_mzml_pipeline(
         ppm_tol=ppm_ms1_tol,
         mz_min=mz_min,
         mz_max=mz_max,
-        mz_offset=0.02
+        mz_offset=mz_offset,
+        mass_offset=mass_offset
     )
     ms1_out = os.path.join(output_dir, "ms1_results.csv")
     ms1_results.to_csv(ms1_out, index=False)

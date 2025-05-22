@@ -11,7 +11,9 @@ def _process_one_file(
     intensity_threshold: float,
     ppm_ms2_tol: float,
     mz_tol: float,
-    smoothing_window: int
+    smoothing_window: int,
+    mz_offset: float = 0.0,
+    mass_offset: float = 0.0
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -37,7 +39,9 @@ def _process_one_file(
             intensity_threshold=intensity_threshold,
             ppm_ms2_tol=ppm_ms2_tol,
             mz_tol=mz_tol,
-            smoothing_window=smoothing_window
+            smoothing_window=smoothing_window,
+            mz_offset=mz_offset,
+            mass_offset=mass_offset
         )
         return base, 'done', None
     except Exception as e:
@@ -53,7 +57,9 @@ def run_parallel_pipeline(
     intensity_threshold: float = 1e2,
     ppm_ms2_tol: float = 50,
     mz_tol: float = 0.05,
-    smoothing_window: int = 20
+    smoothing_window: int = 20,
+    mz_offset: float = 0.0,
+    mass_offset: float = 0.0
 ):
     """
     Discover all .mzML files in `input_dir` and process them in parallel.
@@ -81,7 +87,9 @@ def run_parallel_pipeline(
                 intensity_threshold,
                 ppm_ms2_tol,
                 mz_tol,
-                smoothing_window
+                smoothing_window,
+                mz_offset,
+                mass_offset
             ): path for path in mzml_files
         }
         for fut in as_completed(futures):
