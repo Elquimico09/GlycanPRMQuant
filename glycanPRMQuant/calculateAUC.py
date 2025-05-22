@@ -10,9 +10,9 @@ def calculateAUC(
     scan_col: str = 'scan_number',
     rt_col: str = 'rt',
     intensity_col: str = 'fragment_intensity',
-    rel_height: float = 0.5,
+    rel_height: float = 0.9,
     prominence: float = None,
-    smoothing_window: int = 5,
+    smoothing_window: int = 30,
     plot: bool = False
 ) -> pd.DataFrame:
     """
