@@ -39,7 +39,10 @@ def plot_ms2_fragments(ms2_csv_file, window=20):
     pivot = agg.pivot(index='rt', columns='Fragment', values='sum_intensity').fillna(0)
     
     # Apply moving average smoothing along the RT axis
-    pivot_smoothed = pivot.rolling(window=window, center=True, min_periods=1).mean()
+    if window > 0:
+        pivot_smoothed = pivot.rolling(window=window, center=True, min_periods=1).mean()
+    else:
+        pivot_smoothed = pivot
     
     # Prepare labels including mean m/z for each fragment
     mean_mz_dict = agg.groupby('Fragment')['mean_mz'].first().to_dict()

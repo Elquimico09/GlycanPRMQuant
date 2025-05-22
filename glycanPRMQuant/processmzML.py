@@ -99,7 +99,10 @@ def process_mzml_pipeline(
             .reset_index()
         )
         pivot = agg.pivot(index='rt', columns='Fragment', values='sum_intensity').fillna(0)
-        pivot_smoothed = pivot.rolling(window=smoothing_window, center=True, min_periods=1).mean()
+        if smoothing_window > 0:
+            pivot_smoothed = pivot.rolling(window=smoothing_window, center=True, min_periods=1).mean()
+        else:
+            pivot_smoothed = pivot
 
         # top 3 fragments
         top3 = pivot.sum(axis=0).nlargest(3).index.tolist()
@@ -128,7 +131,7 @@ def process_mzml_pipeline(
     if all_matched:
         all_df = pd.concat(all_matched, ignore_index=True)
         print("Calculating AUC values for all glycans…")
-        auc_df = calculateAUC(all_df)
+        auc_df = calculateAUC(all_df, smoothing_window=smoothing_window)
         auc_path = os.path.join(output_dir, f"{base_name}_auc_values.csv")
         auc_df.to_csv(auc_path, index=False)
         print(f" → Wrote AUC values to {auc_path}")

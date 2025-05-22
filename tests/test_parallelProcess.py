@@ -6,8 +6,8 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     run_parallel_pipeline(
-        input_dir="C:\\Users\\Vishal\\Documents\\Sherif_MCI\\Test",
-        output_root="C:\\Users\\Vishal\\Documents\\Sherif_MCI\\output",
+        input_dir="C:\\Users\\Vishal\\Documents\\Pompe_PRM",
+        output_root="C:\\Users\\Vishal\\Documents\\Pompe_PRM\\output",
         n_workers=8,
         ppm_ms1_tol=10,
         mz_min=400,
@@ -15,5 +15,5 @@ if __name__ == '__main__':
         intensity_threshold=1e2,
         ppm_ms2_tol=20,
         mz_tol=0.05,
-        smoothing_window=2
+        smoothing_window=0
     )
