@@ -44,7 +44,8 @@ def process_mzml_pipeline(
         ms2_data,
         ppm_tol=ppm_ms1_tol,
         mz_min=mz_min,
-        mz_max=mz_max
+        mz_max=mz_max,
+        mz_offset=0.02
     )
     ms1_out = os.path.join(output_dir, "ms1_results.csv")
     ms1_results.to_csv(ms1_out, index=False)

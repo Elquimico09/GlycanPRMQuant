@@ -6,14 +6,14 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     run_parallel_pipeline(
-        input_dir="C:\\Users\\Vishal\\Documents\\Sherif_MCI",
+        input_dir="C:\\Users\\Vishal\\Documents\\Sherif_MCI\\Test",
         output_root="C:\\Users\\Vishal\\Documents\\Sherif_MCI\\output",
         n_workers=8,
-        ppm_ms1_tol=40,
+        ppm_ms1_tol=10,
         mz_min=400,
         mz_max=2000,
-        intensity_threshold=1e3,
-        ppm_ms2_tol=50,
+        intensity_threshold=1e2,
+        ppm_ms2_tol=20,
         mz_tol=0.05,
-        smoothing_window=20
+        smoothing_window=2
     )

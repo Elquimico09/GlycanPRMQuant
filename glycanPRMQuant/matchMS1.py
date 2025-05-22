@@ -1,6 +1,6 @@
 import pandas as pd
 
-def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0):
+def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.02):
     """
     Match MS1 data with glycan database, optionally offsetting all database m/z values.
 

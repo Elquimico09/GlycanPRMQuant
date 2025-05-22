@@ -16,9 +16,11 @@ def calculateAUC(
     plot: bool = False
 ) -> pd.DataFrame:
     """
-    Calculate AUC for each glycan by smoothing the summed fragment-intensity chromatogram,
+    Calculate AUC for each glycan by optionally smoothing the summed fragment-intensity chromatogram,
     detecting the main peak, determining its boundaries at a relative height, and integrating
-    the smoothed intensity between those boundaries.
+    the (smoothed or raw) intensity between those boundaries.
+
+    smoothing_window <= 0 will skip smoothing.
 
     Parameters
     ----------
@@ -37,7 +39,7 @@ def calculateAUC(
     prominence : float or None
         Minimum peak prominence passed to find_peaks.
     smoothing_window : int
-        Number of scans for centered moving-average smoothing.
+        Number of scans for centered moving-average smoothing (if > 0).
     plot : bool
         If True, plot smoothed vs raw chromatogram and integration window.
 
@@ -77,31 +79,41 @@ def calculateAUC(
         x = sub['rt'].to_numpy()
         y = sub['summed_intensity'].to_numpy()
 
-        # smooth
-        y_smooth = pd.Series(y).rolling(window=smoothing_window, center=True, min_periods=1).mean().to_numpy()
+        # apply smoothing if requested
+        if smoothing_window and smoothing_window > 0:
+            y_smooth = pd.Series(y).rolling(
+                window=smoothing_window, center=True, min_periods=1
+            ).mean().to_numpy()
+        else:
+            y_smooth = y
 
-        # detect peaks on smoothed data
+        # detect peaks on y_smooth
         peaks, props = find_peaks(y_smooth, prominence=prominence)
         if len(peaks) == 0:
             main_idx = np.argmax(y_smooth)
         else:
             main_idx = peaks[np.argmax(y_smooth[peaks])]
 
-        # compute width at rel_height on smoothed
-        widths, h_eval, left_ips, right_ips = peak_widths(y_smooth, [main_idx], rel_height=rel_height)
+        # compute width at rel_height on y_smooth
+        widths, h_eval, left_ips, right_ips = peak_widths(
+            y_smooth, [main_idx], rel_height=rel_height
+        )
         left_ip, right_ip = left_ips[0], right_ips[0]
 
-        # map to RT
+        # map to retention time
         idxs = np.arange(len(x))
         start_rt = np.interp(left_ip, idxs, x)
         end_rt   = np.interp(right_ip, idxs, x)
         peak_rt  = x[main_idx]
 
-        # integrate smoothed
+        # integrate using np.trapezoid
         mask = (x >= start_rt) & (x <= end_rt)
         auc = np.trapezoid(y_smooth[mask], x[mask])
 
-        print(f"Glycan {glycan!r}: peak RT={peak_rt:.2f}, window=[{start_rt:.2f}, {end_rt:.2f}], AUC={auc:.2f}")
+        print(
+            f"Glycan {glycan!r}: peak RT={peak_rt:.2f}, "
+            f"window=[{start_rt:.2f}, {end_rt:.2f}], AUC={auc:.2f}"
+        )
         results.append({
             glycan_col: glycan,
             'peak_rt': peak_rt,
@@ -112,8 +124,12 @@ def calculateAUC(
 
         if plot:
             fig, ax = plt.subplots(figsize=(6,3))
-            ax.plot(x, y_smooth, label=f'smoothed (w={smoothing_window})')
-            ax.axvspan(start_rt, end_rt, color='orange', alpha=0.3, label='integration window')
+            ax.plot(x, y_smooth, label=(
+                f'smoothed (w={smoothing_window})'
+                if smoothing_window and smoothing_window > 0 else 'raw'
+            ))
+            ax.axvspan(start_rt, end_rt, color='orange', alpha=0.3,
+                       label='integration window')
             ax.plot(peak_rt, y_smooth[main_idx], 'ro', label='peak apex')
             ax.set_xlabel('RT (min)')
             ax.set_ylabel('Intensity')
@@ -123,7 +139,4 @@ def calculateAUC(
             plt.show()
 
     return pd.DataFrame(results)
-
-# Example usage:
-# auc_df = calculateAUC_by_peak_smoothed("results/ms2_25000.csv", prominence=50, rel_height=0.5, smoothing_window=7, plot=True)
 

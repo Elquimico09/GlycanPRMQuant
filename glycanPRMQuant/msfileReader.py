@@ -165,7 +165,7 @@ def extractMS2(mzml_file, min_intensity = 1):
                     filtered_mzs = np.array(mz_array)[mask]
                     filtered_intensities = np.array(intensity_array)[mask]
 
-                    print(f'Processing scan {scan_number} with {len(filtered_mzs)} fragments')
+                    #print(f'Processing scan {scan_number} with {len(filtered_mzs)} fragments')
 
                     for frag_mz, frag_intensity in zip(filtered_mzs, filtered_intensities):
                         scan_numbers.append(scan_number)

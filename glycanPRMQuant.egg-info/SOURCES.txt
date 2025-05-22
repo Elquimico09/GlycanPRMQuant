@@ -24,6 +24,7 @@ tests/test_MS2spectrum.py
 tests/test_calculateAUC.py
 tests/test_consolidateAUC.py
 tests/test_extractMS1.py
+tests/test_intensityBarplot.py
 tests/test_matchMS1.py
 tests/test_matchMS2.py
 tests/test_parallelProcess.py
