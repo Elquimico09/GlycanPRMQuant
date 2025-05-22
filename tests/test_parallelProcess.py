@@ -6,13 +6,13 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     run_parallel_pipeline(
-        input_dir="sample_data/test_mzML",
-        output_root="sample_data/test_mzML/results_parallel",
+        input_dir="sample_data/mzML",
+        output_root="sample_data/results_parallel",
         n_workers=8,
-        ppm_ms1_tol=40,
+        ppm_ms1_tol=10,
         mz_min=400,
         mz_max=2000,
-        intensity_threshold=1e2,
+        intensity_threshold=1e3,
         ppm_ms2_tol=50,
         mz_tol=0.05,
         smoothing_window=20
