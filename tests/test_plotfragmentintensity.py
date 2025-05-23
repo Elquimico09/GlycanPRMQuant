@@ -2,6 +2,13 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments
-
-path_to_csv = "sample_data/mzML/AZ_0_5ug_R1_matched/ms2_43201.csv"
-plot_ms2_fragments(path_to_csv, window = 10)
+from glycanPRMQuant.plotMS2spectrum import plotMS2spectrum
+file_path = "sample_data/results_parallel/AZ_1ug_R1/ms2_43110.csv"
+svg_path = file_path.replace(".csv", ".svg")
+svg_path_2 = file_path.replace(".csv", "_ms2spectrum.svg")
+plot_ms2_fragments(file_path, window = 10, top_n=10, save_path=svg_path,
+                   figsize=(9, 4))
+avg_df = plotMS2spectrum(file_path=file_path, window_minutes=2,
+                         top_n=10,
+                         save_path=svg_path_2,
+                         figsize=(8, 3))

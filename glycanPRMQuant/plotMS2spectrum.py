@@ -1,8 +1,10 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import scienceplots
 
-def plotMS2spectrum(file_path, window_minutes=2, top_n=None):
+def plotMS2spectrum(file_path, window_minutes=2, top_n=None,
+                    save_path=None, figsize=(10, 6)):
     """
     Reads an MS2 results file (CSV or Excel), identifies the scan with the maximum total fragment intensity,
     averages fragment intensities within a time window around that scan, and plots a single averaged MS2 spectrum
@@ -23,6 +25,8 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=None):
         Columns ['Fragment', 'Charge', 'mz', 'avg_intensity'] for fragments averaged within the window.
     """
     # Load data
+    plt.style.use(['science', 'no-latex'])
+    plt.rcParams['font.family'] = 'Arial'
     ext = os.path.splitext(file_path)[1].lower()
     if ext == '.csv':
         df = pd.read_csv(file_path)
@@ -86,9 +90,10 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=None):
         print(f"Displaying top {top_n} fragments out of {total_frag} by average intensity.")
     # Sort by m/z for consistent plotting order
     frag_charge_avg = frag_charge_avg.sort_values('mz').reset_index(drop=True)
+    max_intensity = frag_charge_avg['avg_intensity'].max()
 
     # Plot averaged spectrum
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=figsize)
     markerline, stemlines, baseline = ax.stem(
         frag_charge_avg['mz'],
         frag_charge_avg['avg_intensity']
@@ -103,21 +108,34 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=None):
         frag_charge_avg['Charge']
     ):
         ax.text(
-            x, y * 1.02,
+            x, y * 1.05,
             f"{frag}\n{x:.4f}+{int(charge)}",
             ha='center', va='bottom',
-            rotation=0, fontsize=10
+            rotation=0, fontsize=8.5
         )
 
     ax.set_xlabel('m/z')
     ax.set_ylabel('Average Intensity')
-    ax.set_ylim(0, frag_charge_avg['avg_intensity'].max() * 1.1)
-    ax.set_xlim(0, frag_charge_avg['mz'].max() * 1.05)
-    title = f"Averaged MS2 Spectrum around RT={rt_peak:.2f}±{half_window:.2f} min"
+    # Add max intensity text to top left of the plot
+    ax.text(
+        0.01, 0.95,
+        f"Max Intensity: {max_intensity:.0f}",
+        transform=ax.transAxes,
+        ha='left', va='top',
+        fontsize=12,
+        fontdict={'weight': 'bold', 'color': 'black'}
+    )
+    ax.set_ylim(0, frag_charge_avg['avg_intensity'].max() * 1.2)
+    ax.set_xlim(frag_charge_avg['mz'].min() - 100, frag_charge_avg['mz'].max() * 1.05)
+    title = f"Averaged MS2 Spectrum"
     if top_n is not None:
         title += f" (Top {top_n})"
     ax.set_title(title)
     plt.tight_layout()
-    plt.show()
+    if save_path:
+        fig.savefig(save_path, dpi=300)
+        print(f"Saved plot to {save_path}")
+    else:
+        plt.show()
 
     return frag_charge_avg
