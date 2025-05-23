@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import scienceplots
+from scipy.ndimage import gaussian_filter1d
 
-def plot_ms2_fragments(ms2_csv_file, window=20):
+def plot_ms2_fragments(ms2_csv_file, window=11):
     """
     Reads an MS2 results CSV file, aggregates fragment data per scan grouped by Fragment,
     applies moving average smoothing, and plots summed intensity vs. RT
@@ -17,6 +19,7 @@ def plot_ms2_fragments(ms2_csv_file, window=20):
     """
     # Read the CSV file
     df = pd.read_csv(ms2_csv_file)
+    plt.style.use(['science', 'no-latex'])
     
     # Check required columns
     required_cols = {'scan_number', 'rt', 'Fragment', 'fragment_mz', 'fragment_intensity'}
@@ -40,7 +43,10 @@ def plot_ms2_fragments(ms2_csv_file, window=20):
     
     # Apply moving average smoothing along the RT axis
     if window > 0:
-        pivot_smoothed = pivot.rolling(window=window, center=True, min_periods=1).mean()
+        pivot_smoothed = pivot.apply(
+            lambda x: gaussian_filter1d(x, sigma=window, mode='nearest'),
+            axis=0
+        )
     else:
         pivot_smoothed = pivot
     
