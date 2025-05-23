@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_widths
+from scipy.ndimage import gaussian_filter1d
+import scienceplots
 
 def calculateAUC(
     ms2_input,
@@ -13,7 +15,8 @@ def calculateAUC(
     rel_height: float = 0.9,
     prominence: float = None,
     smoothing_window: int = 30,
-    plot: bool = False
+    plot: bool = False,
+    save_path: str = None
 ) -> pd.DataFrame:
     """
     Calculate AUC for each glycan by optionally smoothing the summed fragment-intensity chromatogram,
@@ -81,9 +84,9 @@ def calculateAUC(
 
         # apply smoothing if requested
         if smoothing_window and smoothing_window > 0:
-            y_smooth = pd.Series(y).rolling(
-                window=smoothing_window, center=True, min_periods=1
-            ).mean().to_numpy()
+            y_smooth = gaussian_filter1d(
+                y, sigma=smoothing_window, mode='nearest'
+            )
         else:
             y_smooth = y
 
@@ -121,22 +124,26 @@ def calculateAUC(
             'end_rt': end_rt,
             'AUC': auc
         })
+        plt.style.use(['science', 'no-latex'])
+        plt.rcParams['font.family'] = 'Arial'
 
         if plot:
-            fig, ax = plt.subplots(figsize=(6,3))
+            fig, ax = plt.subplots(figsize=(3,3))
             ax.plot(x, y_smooth, label=(
                 f'smoothed (w={smoothing_window})'
                 if smoothing_window and smoothing_window > 0 else 'raw'
             ))
-            ax.axvspan(start_rt, end_rt, color='orange', alpha=0.3,
+            ax.axvspan(start_rt, end_rt, color='red', alpha=0.1,
                        label='integration window')
-            ax.plot(peak_rt, y_smooth[main_idx], 'ro', label='peak apex')
             ax.set_xlabel('RT (min)')
             ax.set_ylabel('Intensity')
-            ax.set_title(f"{glycan}: AUC_by_peak_smoothed")
-            ax.legend()
+            ax.set_title(f"{glycan}: Integration Window")
             plt.tight_layout()
-            plt.show()
+            if save_path:
+                plt.savefig(save_path, dpi=300)
+                print(f"Saved plot to {save_path}")
+            else:
+                plt.show()
 
     return pd.DataFrame(results)
 

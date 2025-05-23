@@ -73,7 +73,7 @@ def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
     
     # Prepare labels
     mean_mz_dict = agg.groupby('Fragment')['mean_mz'].first().to_dict()
-    labels = {frag: f"{frag} ({mean_mz_dict.get(frag, 0):.4f})" for frag in top_frags}
+    labels = {frag: f"{frag}" for frag in top_frags}
     
     # Plotting
     fig, ax = plt.subplots(figsize=figsize)

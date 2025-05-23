@@ -6,8 +6,8 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     run_parallel_pipeline(
-        input_dir="C:\\Users\\Vishal\\Documents\\Pompe_PRM",
-        output_root="C:\\Users\\Vishal\\Documents\\Pompe_PRM\\output",
+        input_dir="sample_data/mzML",
+        output_root="sample_data/results_parallel_re/",
         n_workers=4,
         ppm_ms1_tol=5,
         mz_min=400,
@@ -16,6 +16,6 @@ if __name__ == '__main__':
         ppm_ms2_tol=5,
         mz_tol=0.05,
         smoothing_window=5,
-        mass_offset=1.0,
+        mass_offset=0,
         mz_offset=0.0
     )

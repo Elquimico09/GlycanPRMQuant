@@ -3,11 +3,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
-
 from glycanPRMQuant.msfileReader import extractMS2
 from glycanPRMQuant.matchMS1 import matchMS1
 from glycanPRMQuant.matchMS2 import matchMS2
 from glycanPRMQuant.calculateAUC import calculateAUC
+from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments
+from glycanPRMQuant.plotMS2spectrum import plotMS2spectrum
 
 def process_mzml_pipeline(
     mzml_file: str,
@@ -16,32 +17,32 @@ def process_mzml_pipeline(
     ppm_ms1_tol: float = 10,
     mz_min: float = 400,
     mz_max: float = 2000,
+    mz_offset: float = 0.0,
+    mass_offset: float = 0.0,
     # MS2 matching parameters
     intensity_threshold: float = 1e2,
     ppm_ms2_tol: float = 10,
     mz_tol: float = 0.02,
-    smoothing_window: int = 20,
-    mz_offset: float = 0.0,
-    mass_offset: float = 0.0,
+    smoothing_window: int = 11,
+    fragment_top_n: int = 10,
+    spectrum_window_minutes: float = 2.0
 ):
     """
-    Full MS1→MS2 pipeline for one .mzML file, using built-in glycan DBs,
-    saves per-glycan MS2 plots into output_dir/images/, shows top 3 fragments
-    + total, and computes AUC per glycan, writing to
-    <mzML_basename>_auc_values.csv in output_dir.
+    Full MS1→MS2 pipeline for one .mzML file, using built-in glycan DBs.
+    Saves per-glycan MS2 CSVs and plots (chromatograms + averaged spectra) into output_dir/images/,
+    and computes AUC per glycan, writing to <basename>_auc_values.csv.
     """
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
-
     os.makedirs(output_dir, exist_ok=True)
     images_dir = os.path.join(output_dir, 'images')
     os.makedirs(images_dir, exist_ok=True)
 
-    # 1) Extract all MS2 scans
+    # 1) Extract MS2
     print(f"Extracting MS2 data from {mzml_file} (min_intensity={intensity_threshold})…")
     ms2_data = extractMS2(mzml_file, min_intensity=intensity_threshold)
     print(f" → Extracted {len(ms2_data)} MS2 points.")
 
-    # 2) Match MS1 precursors
+    # 2) Match MS1
     print(f"Matching MS1 precursors (±{ppm_ms1_tol} ppm, m/z {mz_min}-{mz_max})…")
     ms1_results = matchMS1(
         ms2_data,
@@ -59,10 +60,9 @@ def process_mzml_pipeline(
         print("No MS1 matches found; skipping MS2 matching and AUC.")
         return
 
-    # prepare to collect all matched MS2
     all_matched = []
 
-    # 3) For each glycan, match MS2 and then plot+save
+    # 3) MS2 match + plotting
     glycans = {
         comp
         for comps in ms1_results['Glycan']
@@ -84,57 +84,36 @@ def process_mzml_pipeline(
             print(f"  → No MS2 fragments for {glycan!r}.")
             continue
 
-        # collect for AUC
         all_matched.append(matched_ms2)
 
-        # write per-glycan CSV
+        # save CSV
         csv_path = os.path.join(output_dir, f"ms2_{glycan}.csv")
         matched_ms2.to_csv(csv_path, index=False)
         print(f"  → Wrote {len(matched_ms2)} MS2 matches to {csv_path}")
 
-        # aggregate by scan_number, rt, Fragment
-        agg = (
-            matched_ms2
-            .groupby(['scan_number', 'rt', 'Fragment'])
-            .agg(
-                mean_mz=('fragment_mz', lambda x: round(x.mean(), 4)),
-                sum_intensity=('fragment_intensity', 'sum')
-            )
-            .reset_index()
+        # plot fragment chromatograms
+        chrom_svg = os.path.join(images_dir, f"ms2_{glycan}.svg")
+        plot_ms2_fragments(
+            ms2_csv_file=csv_path,
+            window=smoothing_window,
+            top_n=fragment_top_n,
+            save_path=chrom_svg,
+            figsize=(9, 4)
         )
-        pivot = agg.pivot(index='rt', columns='Fragment', values='sum_intensity').fillna(0)
-        if smoothing_window > 0:
-            pivot_smoothed = pivot.apply(
-                lambda x: gaussian_filter1d(x, sigma=smoothing_window, mode='nearest'),
-                axis=0
-            )
-        else:
-            pivot_smoothed = pivot
+        print(f"  → Saved chromatogram to {chrom_svg}")
 
-        # top 3 fragments
-        top3 = pivot.sum(axis=0).nlargest(3).index.tolist()
-        total_per_rt = pivot_smoothed.sum(axis=1)
-        mean_mz_map = agg.groupby('Fragment')['mean_mz'].first().to_dict()
-        labels = {frag: f"{frag} ({mean_mz_map[frag]:.4f})" for frag in top3}
+        # plot averaged spectrum
+        spec_svg = os.path.join(images_dir, f"ms2_{glycan}_ms2spectrum.svg")
+        _ = plotMS2spectrum(
+            file_path=csv_path,
+            window_minutes=spectrum_window_minutes,
+            top_n=fragment_top_n,
+            save_path=spec_svg,
+            figsize=(8, 4)
+        )
+        print(f"  → Saved averaged spectrum to {spec_svg}")
 
-        # plotting
-        fig, ax = plt.subplots(figsize=(10, 6))
-        for frag in top3:
-            ax.plot(pivot_smoothed.index, pivot_smoothed[frag], label=labels[frag], linewidth=2)
-        ax.plot(total_per_rt.index, total_per_rt.values, linestyle='--', label='Total Intensity', linewidth=2)
-        ax.set_xlabel('Retention Time (RT)')
-        ax.set_ylabel('Smoothed Summed Fragment Intensity')
-        ax.set_title(f'Glycan {glycan}: Top 3 + Total (MA window={smoothing_window})')
-        ax.legend(title='Fragment (mean m/z)', bbox_to_anchor=(1.05, 1), loc='upper left')
-        ax.grid(alpha=0.3)
-        fig.tight_layout()
-
-        img_path = os.path.join(images_dir, f"ms2_{glycan}.png")
-        fig.savefig(img_path)
-        plt.close(fig)
-        print(f"  → Saved plot to {img_path}")
-
-    # 4) Compute and save AUC values if any matched MS2 exist
+    # 4) AUC calculation
     if all_matched:
         all_df = pd.concat(all_matched, ignore_index=True)
         print("Calculating AUC values for all glycans…")
