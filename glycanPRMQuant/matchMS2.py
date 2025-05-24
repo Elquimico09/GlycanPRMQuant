@@ -42,7 +42,7 @@ def matchMS2(
     """
 
     PROTON_MASS   = 1.007276
-    AMMONIUM_MASS = 18.033825
+    AMMONIUM_MASS = 18.033826
 
     print(f"Starting MS2 matching with ±{mz_tol} Da tolerance")
     # 1) load and filter MS2 fragment database
