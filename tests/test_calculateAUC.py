@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from glycanPRMQuant.calculateAUC import calculateAUC
 # Define the directory containing the CSV files
-directory = "sample_data/results_parallel/AZ_1ug_R3/"
+directory = "sample_data/results_parallel/AZ_2ug_R3/"
 # Get a list of all CSV files in the directory
 csv_files = glob.glob(os.path.join(directory, "*.csv"))
 # remove any files that are not MS2 files
