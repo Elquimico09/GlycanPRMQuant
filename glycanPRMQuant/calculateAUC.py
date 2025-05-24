@@ -111,7 +111,7 @@ def calculateAUC(
 
         # integrate using np.trapezoid
         mask = (x >= start_rt) & (x <= end_rt)
-        auc = np.trapezoid(y_smooth[mask], x[mask])
+        auc = np.trapezoid(y_smooth[mask], dx=1)
 
         print(
             f"Glycan {glycan!r}: peak RT={peak_rt:.2f}, "
