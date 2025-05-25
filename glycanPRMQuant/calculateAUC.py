@@ -16,7 +16,8 @@ def calculateAUC(
     prominence: float = None,
     smoothing_window: int = 30,
     plot: bool = False,
-    save_path: str = None
+    save_path: str = None,
+    window = 0
 ) -> pd.DataFrame:
     """
     Calculate AUC for each glycan by optionally smoothing the summed fragment-intensity chromatogram,
@@ -128,7 +129,7 @@ def calculateAUC(
         plt.rcParams['font.family'] = 'Arial'
 
         if plot:
-            fig, ax = plt.subplots(figsize=(3,3))
+            fig, ax = plt.subplots(figsize=(2,3))
             ax.plot(x, y_smooth, label=(
                 f'smoothed (w={smoothing_window})'
                 if smoothing_window and smoothing_window > 0 else 'raw'
@@ -137,6 +138,8 @@ def calculateAUC(
                        label='integration window')
             ax.set_xlabel('RT (min)')
             ax.set_ylabel('Intensity')
+            plt.xlim(x.min()-window, x.max()+window)
+            plt.ylim(0, y_smooth.max() * 1.1)
             ax.set_title(f"{glycan}: Integration Window")
             plt.tight_layout()
             if save_path:

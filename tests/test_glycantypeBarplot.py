@@ -1,0 +1,2 @@
+from glycanPRMQuant.glycanClassification import classifyGlycan
+from glycanPRMQuant.glycantypeBarplot import plot_barplot

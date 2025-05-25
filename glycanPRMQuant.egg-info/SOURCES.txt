@@ -28,6 +28,7 @@ tests/test_calculateAUC.py
 tests/test_consolidateAUC.py
 tests/test_extractMS1.py
 tests/test_glycanClassification.py
+tests/test_glycantypeBarplot.py
 tests/test_intensityBarplot.py
 tests/test_matchMS1.py
 tests/test_matchMS2.py
