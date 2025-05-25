@@ -145,7 +145,7 @@ def matchMS2(
     neighbors = tree.query_ball_point(obs_mzs.reshape(-1,1), r=mz_tol)
 
     matched = []
-    base_cols = ['scan_number', 'precursor_mz', 'fragment_intensity', 'Glycan']
+    base_cols = ['scan_number', 'rt', 'precursor_mz', 'fragment_intensity', 'Glycan']
     base_data = ms2f[base_cols].to_dict('records')
 
     for i, nbrs in enumerate(neighbors):

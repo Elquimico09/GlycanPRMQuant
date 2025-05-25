@@ -35,14 +35,14 @@ class PipelineGUI(tk.Tk):
         row += 1
 
         # Numeric parameters
-        self.n_workers           = add_label_entry("Workers",            4,    row); row+=1
-        self.ppm_ms1_tol         = add_label_entry("MS1 ppm tol",       20,   row); row+=1
+        self.n_workers           = add_label_entry("Workers",            2,    row); row+=1
+        self.ppm_ms1_tol         = add_label_entry("MS1 ppm tol",       10,   row); row+=1
         self.mz_min              = add_label_entry("MS1 m/z min",       400,  row); row+=1
         self.mz_max              = add_label_entry("MS1 m/z max",       2000, row); row+=1
         self.intensity_threshold = add_label_entry("MS2 intensity",     1e2,  row); row+=1
-        self.ppm_ms2_tol         = add_label_entry("MS2 ppm tol",       20,   row); row+=1
-        self.mz_tol              = add_label_entry("MS2 m/z tol",       0.05, row); row+=1
-        self.smoothing_window    = add_label_entry("Smoothing window",  11,   row); row+=1
+        self.ppm_ms2_tol         = add_label_entry("MS2 ppm tol",       10,   row); row+=1
+        self.mz_tol              = add_label_entry("MS2 m/z tol",       0.02, row); row+=1
+        self.smoothing_window    = add_label_entry("Smoothing window",  5,   row); row+=1
         self.mass_offset         = add_label_entry("Mass offset",       0.0,  row); row+=1
         self.mz_offset           = add_label_entry("m/z offset",        0.0,  row); row+=1
 
