@@ -6,8 +6,8 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     run_parallel_pipeline(
-        input_dir="sample_data/RiboB",
-        output_root="sample_data/RiboB/processed/",
+        input_dir="sample_data/Fetuin",
+        output_root="sample_data/Fetuin/Processed",
         n_workers=4,
         ppm_ms1_tol=20,
         mz_min=400,

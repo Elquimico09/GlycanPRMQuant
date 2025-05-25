@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
+import scienceplots
 
 def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
                        figsize=(10, 5)):

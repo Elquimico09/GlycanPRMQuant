@@ -1,31 +1,43 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import scienceplots
 
-def plot_glycan_intensity_boxplot(consolidated_csv: str):
+def plot_glycan_intensity_boxplot(consolidated_csv: str,
+                                  save_path: str = None) -> None:
     """
-    Reads the consolidated AUC CSV and plots a boxplot of glycan intensities per sample.
-
-    Parameters
-    ----------
-    consolidated_csv : str
-        Path to the consolidated CSV with 'Glycan' and one column per sample.
+    Reads the consolidated AUC CSV and plots a boxplot of glycan intensities per sample,
+    preserving the original sample column order.
     """
+    plt.style.use(['science', 'no-latex'])
+    plt.rcParams['font.family'] = 'Arial'
+    
     # Load data
     df = pd.read_csv(consolidated_csv)
     
-    # Melt to long format: columns = ['Glycan', 'Sample', 'AUC']
-    long_df = df.melt(id_vars='Glycan', var_name='Sample', value_name='AUC').fillna(0)
+    # Identify samples in original order (all columns except 'Glycan')
+    samples = [col for col in df.columns if col != 'Glycan']
     
-    # Prepare data: list of lists of AUCs per sample in sorted sample order
-    samples = sorted(long_df['Sample'].unique())
+    # Melt to long format
+    long_df = df.melt(
+        id_vars='Glycan',
+        value_vars=samples,
+        var_name='Sample',
+        value_name='AUC'
+    ).fillna(0)
+    
+    # Prepare data: one list of AUCs per sample, in original order
     data = [long_df.loc[long_df['Sample'] == s, 'AUC'].values for s in samples]
     
-    # Plot boxplot
-    plt.figure(figsize=(10, 6))
+    # Plot
+    plt.figure(figsize=(7, 4))
     plt.boxplot(data, labels=samples, showfliers=False)
-    plt.xlabel('Sample')
-    plt.ylabel('Glycan AUC')
-    plt.title('Distribution of Glycan Intensities per Sample')
-    plt.xticks(rotation=45, ha='right')
+    plt.ylabel('Glycan Abundance', fontsize=14)
+    plt.title('Distribution of Glycan Abundance per Sample')
+    plt.xticks(rotation=45, ha='right', fontsize = 12)
     plt.tight_layout()
-    plt.show()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved boxplot to {save_path}")
+    else:
+        plt.show()

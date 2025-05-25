@@ -15,6 +15,7 @@ glycanPRMQuant/performPCA.py
 glycanPRMQuant/plotFragmentIntensity.py
 glycanPRMQuant/plotMS2spectrum.py
 glycanPRMQuant/processmzML.py
+glycanPRMQuant/skylineTransition.py
 glycanPRMQuant.egg-info/PKG-INFO
 glycanPRMQuant.egg-info/SOURCES.txt
 glycanPRMQuant.egg-info/dependency_links.txt
@@ -33,4 +34,5 @@ tests/test_parallelProcess.py
 tests/test_performPCA2D.py
 tests/test_plotfragmentintensity.py
 tests/test_processmzML.py
+tests/test_skylineTransition.py
 tests/test_yyfragmentation.py
