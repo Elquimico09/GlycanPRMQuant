@@ -65,7 +65,8 @@ def matchMS2(
     NH4    = 18.033826
 
     # 1) load & filter fragment database
-    db = pd.read_csv("database/fragment_database.csv", dtype={'Glycan': str})
+    db = pd.read_csv("database/fragment_database.csv")
+    db['Glycan'] = db['Glycan'].astype(str)
     dbf = db.loc[db['Glycan'] == precursor_composition].copy()
     if dbf.empty:
         print(f"No database entries for {precursor_composition}")
