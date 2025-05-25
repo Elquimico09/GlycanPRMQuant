@@ -37,8 +37,20 @@ def classifyGlycan(consolidated_csv: str) -> pd.DataFrame:
         if row['pos5'] > 0:
             return 'sialylated'
         return 'other'
+    
+    def _classify_type(row):
+        # High mannose: HexNAc2 (pos1==2) & Hexose>=5 (pos2>=5)
+        if row['pos1'] == 2 and row['pos2'] >= 5:
+            return 'high mannose'
+        # Complex if HexNAc (pos1) > 2 and Hexose (pos2) == 3 and Hexose (pos4) > 1
+        if row['pos1'] > 2 and row['pos2'] == 3 and row['pos4'] > 1:
+            return 'complex'
+        # Hybrid if HexNAc (pos1) > 2 and Hexose (pos2) > 3
+        if row['pos1'] > 2 and row['pos2'] > 3:
+            return 'hybrid'
 
     df['Class'] = df.apply(_classify, axis=1)
+    df['Type'] = df.apply(_classify_type, axis=1)
 
     # drop helper string column if you like
     df = df.drop(columns=['gly_str'])
