@@ -1,31 +1,52 @@
 import os
+import time
 import pandas as pd
 import numpy as np
-from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
 
-def preprocess_ms2_data(ms2_extracted_data: pd.DataFrame, mz_tol: float = 0.1) -> pd.DataFrame:
+from scipy.spatial import cKDTree
+
+def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
     """
-    Cluster fragment m/z values within mz_tol for each spectrum,
-    average the m/z in each cluster, and sum the intensities.
+    Fast 1D clustering: sort mzs, start a new cluster whenever the gap > tol.
+    Returns an array of cluster labels in the original order.
     """
-    df = ms2_extracted_data.copy()
-    result = []
+    if mzs.size == 0:
+        return np.array([], dtype=int)
+    idx = np.argsort(mzs)
+    sorted_mzs = mzs[idx]
+    labels = np.zeros_like(sorted_mzs, dtype=int)
+    cl = 0
+    for i in range(1, len(sorted_mzs)):
+        if sorted_mzs[i] - sorted_mzs[i-1] > tol:
+            cl += 1
+        labels[i] = cl
+    # invert the sort
+    inv = np.empty_like(idx)
+    inv[idx] = np.arange(len(idx))
+    return labels[inv]
 
-    # process spectrum by spectrum
-    for (scan, precursor), grp in df.groupby(['scan_number', 'precursor_mz']):
-        mzs = grp['fragment_mz'].values.reshape(-1, 1)
-        labels = DBSCAN(eps=mz_tol, min_samples=1).fit_predict(mzs)
-        grp = grp.assign(cluster=labels)
 
-        for cid, sub in grp.groupby('cluster'):
+def preprocess_ms2_data(ms2: pd.DataFrame, mz_tol: float = 0.1) -> pd.DataFrame:
+    """
+    For each (scan_number, precursor_mz) group, cluster fragment_mz via cluster_1d
+    and collapse to one row per cluster (mean m/z, summed intensity).
+    """
+    out = []
+    grouped = ms2.groupby(['scan_number', 'precursor_mz'])
+    for (scan, prec), grp in grouped:
+        mzs = grp['fragment_mz'].to_numpy()
+        labels = cluster_1d(mzs, mz_tol)
+        for cl in np.unique(labels):
+            sub = grp.iloc[labels == cl]
             row = sub.iloc[0].copy()
             row['fragment_mz'] = sub['fragment_mz'].mean()
             row['fragment_intensity'] = sub['fragment_intensity'].sum()
-            result.append(row)
+            out.append(row)
+    result = pd.DataFrame(out).reset_index(drop=True)
+    print(f"Preprocessed MS2 data: {len(ms2)} → {len(result)} fragments")
+    return result
 
-    out = pd.DataFrame(result).reset_index(drop=True)
-    print(f"Preprocessed MS2 data: reduced from {len(df)} to {len(out)} fragment ions")
-    return out
 
 def matchMS2(
     ms2_extracted_data: pd.DataFrame,
@@ -36,99 +57,112 @@ def matchMS2(
     ppm_tol: float = 10
 ) -> pd.DataFrame:
     """
-    Match MS2 fragments to a glycan's theoretical fragments (M+H, [M+2H]2+,
-    M+NH4, and [M+H+NH4]2+).  The NH4 adducts are only considered if
-    the glycan composition string starts with '2'.
+    Vectorized MS2 matching using cKDTree on theoretical adduct m/z’s.
+    NH4 adducts are only included if glycan starts with '2'.
     """
 
-    PROTON_MASS   = 1.007276
-    AMMONIUM_MASS = 18.033826
+    PROTON = 1.007276
+    NH4    = 18.033826
 
-    print(f"Starting MS2 matching with ±{mz_tol} Da tolerance")
-    # 1) load and filter MS2 fragment database
-    db = pd.read_csv("database/fragment_database.csv")
-    db['Glycan'] = db['Glycan'].astype(str)
-    dbf = db[db['Glycan'] == precursor_composition].copy()
-    print(f"Loaded {len(dbf)} entries for Glycan {precursor_composition}")
+    # 1) load & filter fragment database
+    db = pd.read_csv("database/fragment_database.csv", dtype={'Glycan': str})
+    dbf = db.loc[db['Glycan'] == precursor_composition].copy()
+    if dbf.empty:
+        print(f"No database entries for {precursor_composition}")
+        return pd.DataFrame()
 
-    # 2) compute adduct m/z columns
-    dbf['mz_H']       = dbf['Fragment Mass'] + PROTON_MASS
-    dbf['mz_2H']      = (dbf['Fragment Mass'] + 2*PROTON_MASS) / 2
-    dbf['mz_NH4']     = dbf['Fragment Mass'] + AMMONIUM_MASS
-    dbf['mz_H_NH4']   = (dbf['Fragment Mass'] + PROTON_MASS + AMMONIUM_MASS) / 2
+    # 2) build a single adduct table
+    #    columns: Theo_mz, Fragment, Charge
+    table = []
+    # +H (1+)
+    table.append(pd.DataFrame({
+        'Theo_mz': dbf['Fragment Mass'] + PROTON,
+        'Fragment': dbf['Fragment'],
+        'Charge': 1
+    }))
+    # +2H (2+)
+    table.append(pd.DataFrame({
+        'Theo_mz': (dbf['Fragment Mass'] + 2*PROTON) / 2,
+        'Fragment': dbf['Fragment'],
+        'Charge': 2
+    }))
+    # conditional NH4 adducts
+    if str(precursor_composition).startswith('2'):
+        # +NH4 (1+)
+        table.append(pd.DataFrame({
+            'Theo_mz': dbf['Fragment Mass'] + NH4,
+            'Fragment': dbf['Fragment'],
+            'Charge': 1
+        }))
+        # +H+NH4 (2+)
+        table.append(pd.DataFrame({
+            'Theo_mz': (dbf['Fragment Mass'] + PROTON + NH4) / 2,
+            'Fragment': dbf['Fragment'],
+            'Charge': 2
+        }))
 
-    # 3) filter MS2 data to only those precursors matched in MS1
-    glycan_precs = precursor_matched_data[
+    adduct_df = pd.concat(table, ignore_index=True)
+    theo_mzs   = adduct_df['Theo_mz'].to_numpy()
+    tree       = cKDTree(theo_mzs.reshape(-1,1))
+
+    # 3) select MS2 rows whose precursor_mz matches an MS1 precursor
+    precs = (
         precursor_matched_data['Glycan']
         .str.split(';')
         .apply(lambda comps: precursor_composition in [c.strip() for c in comps])
-    ]['precursor_mz'].unique()
-    if len(glycan_precs) == 0:
+    )
+    matched_precs = precursor_matched_data.loc[precs, 'precursor_mz'].unique()
+    if matched_precs.size == 0:
         print(f"No MS1 precursor matches for {precursor_composition}")
         return pd.DataFrame()
 
     filt = []
-    for prec in glycan_precs:
-        ppm_window = prec * ppm_tol / 1e6
+    for p in matched_precs:
+        tol = p * ppm_tol / 1e6
         sel = ms2_extracted_data[
-            (ms2_extracted_data['precursor_mz'].between(prec-ppm_window, prec+ppm_window)) &
+            ms2_extracted_data['precursor_mz'].between(p-tol, p+tol) &
             (ms2_extracted_data['fragment_intensity'] >= intensity_threshold)
         ]
         if not sel.empty:
             filt.append(sel.assign(Glycan=precursor_composition))
     if not filt:
-        print(f"No MS2 spectra for {precursor_composition} after filtering")
+        print(f"No MS2 data after filtering for {precursor_composition}")
         return pd.DataFrame()
     ms2f = pd.concat(filt, ignore_index=True)
-    print(f"Found {len(ms2f)} MS2 points matching precursors")
 
-    # 4) cluster within each spectrum
+    # 4) cluster fragments within each spectrum
     ms2f = preprocess_ms2_data(ms2f, mz_tol=0.1)
 
-    # 5) build adduct list
-    adducts = [
-        ('mz_H',     1),
-        ('mz_2H',    2)
-    ]
-    if str(precursor_composition).startswith('2'):
-        adducts += [
-            ('mz_NH4',   1),
-            ('mz_H_NH4', 2)
-        ]
+    # 5) perform vectorized adduct matching
+    obs_mzs = ms2f['fragment_mz'].to_numpy()
+    neighbors = tree.query_ball_point(obs_mzs.reshape(-1,1), r=mz_tol)
 
-    # 6) match each observed fragment to closest adduct entry
     matched = []
-    for _, frag in ms2f.iterrows():
-        mz_obs = frag['fragment_mz']
-        best = None
-        best_diff = mz_tol + 1e-6
-        for col, charge in adducts:
-            hits = dbf[
-                (dbf[col] >= mz_obs - mz_tol) &
-                (dbf[col] <= mz_obs + mz_tol)
-            ]
-            for _, hit in hits.iterrows():
-                diff = abs(hit[col] - mz_obs)
-                if diff < best_diff:
-                    best_diff = diff
-                    best = {
-                        **frag.to_dict(),
-                        'Fragment':     hit['Fragment'],   # preserve DB's Fragment name
-                        'Charge':       charge,
-                        'Fragment_mz':  hit[col],
-                        'mz_diff':      diff,
-                        'ppm_error':    diff / hit[col] * 1e6
-                    }
-        if best:
-            matched.append(best)
+    base_cols = ['scan_number', 'precursor_mz', 'fragment_intensity', 'Glycan']
+    base_data = ms2f[base_cols].to_dict('records')
+
+    for i, nbrs in enumerate(neighbors):
+        if not nbrs:
+            continue
+        diffs = np.abs(theo_mzs[nbrs] - obs_mzs[i])
+        j = nbrs[np.argmin(diffs)]
+        hit = adduct_df.iloc[j]
+        diff = diffs.min()
+        row = dict(base_data[i])
+        row.update({
+            'Fragment':    hit['Fragment'],
+            'Charge':      int(hit['Charge']),
+            'Fragment_mz': float(hit['Theo_mz']),
+            'mz_diff':     float(diff),
+            'ppm_error':   float(diff / hit['Theo_mz'] * 1e6)
+        })
+        matched.append(row)
 
     if not matched:
-        print(f"No fragment matches for glycan {precursor_composition}")
+        print(f"No fragments matched for {precursor_composition}")
         return pd.DataFrame()
 
-    matched_df = pd.DataFrame(matched)
-    print(f"Successfully matched {len(matched_df)} fragments:")
-    for ch, cnt in matched_df['Charge'].value_counts().items():
-        print(f"  - {cnt} hits at charge {ch}+")
-
-    return matched_df
+    out = pd.DataFrame(matched)
+    print(f"Matched {len(out)} fragments for {precursor_composition}:")
+    print(out['Charge'].value_counts().rename_axis('Charge').to_string())
+    return out
