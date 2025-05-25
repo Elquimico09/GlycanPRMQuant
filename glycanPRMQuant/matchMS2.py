@@ -107,6 +107,12 @@ def matchMS2(
     tree       = cKDTree(theo_mzs.reshape(-1,1))
 
     # 3) select MS2 rows whose precursor_mz matches an MS1 precursor
+    precursor_matched_data = precursor_matched_data.copy()
+    precursor_matched_data['Glycan'] = (
+    precursor_matched_data['Glycan']
+    .astype(str)
+    .str.strip()                  # remove leading/trailing spaces
+    )
     precs = (
         precursor_matched_data['Glycan']
         .str.split(';')
