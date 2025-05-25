@@ -12,6 +12,7 @@ glycanPRMQuant/msPlotter.py
 glycanPRMQuant/msfileReader.py
 glycanPRMQuant/parallelProcess.py
 glycanPRMQuant/performPCA.py
+glycanPRMQuant/pipelineGUI.py
 glycanPRMQuant/plotFragmentIntensity.py
 glycanPRMQuant/plotMS2spectrum.py
 glycanPRMQuant/processmzML.py
