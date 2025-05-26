@@ -129,7 +129,7 @@ def calculateAUC(
         plt.rcParams['font.family'] = 'Arial'
 
         if plot:
-            fig, ax = plt.subplots(figsize=(2,3))
+            fig, ax = plt.subplots(figsize=(2.5,3))
             ax.plot(x, y_smooth, label=(
                 f'smoothed (w={smoothing_window})'
                 if smoothing_window and smoothing_window > 0 else 'raw'

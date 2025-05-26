@@ -5,6 +5,7 @@ glycanPRMQuant/centroidData.py
 glycanPRMQuant/consolidateAUC.py
 glycanPRMQuant/glycanBuilder.py
 glycanPRMQuant/glycanClassification.py
+glycanPRMQuant/glycanClassificationUI.py
 glycanPRMQuant/glycantypeBarplot.py
 glycanPRMQuant/intensityBarplot.py
 glycanPRMQuant/matchMS1.py

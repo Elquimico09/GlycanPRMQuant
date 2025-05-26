@@ -32,15 +32,15 @@ from glycanPRMQuant.calculateAUC import calculateAUC
 
 
 
-csv_file = "c:\\Users\\Vishal\\Documents\\Pompe_PRM\\Processed\\G_10_2_10252024\\ms2_27000.csv"
+csv_file = "C:\\Users\\Vishal\\Documents\\Pompe_PRM\\Pompe\\Processed\\Pompe_5_1_10252024\\ms2_53211.csv"
 save_path = csv_file.replace(".csv", "_AUC.svg")
 auc = calculateAUC(csv_file,
     glycan_col='Glycan',
     rt_col='rt',
     intensity_col='fragment_intensity',
     scan_col='scan_number',
-    rel_height=0.9,
-    smoothing_window=3,
+    rel_height=0.5,
+    smoothing_window=5,
     plot=True,
     save_path=save_path,
     window = 2)
