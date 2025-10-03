@@ -3,7 +3,10 @@ glycanPRMQuant/__init__.py
 glycanPRMQuant/calculateAUC.py
 glycanPRMQuant/centroidData.py
 glycanPRMQuant/consolidateAUC.py
+glycanPRMQuant/constants.py
 glycanPRMQuant/glycanBuilder.py
+glycanPRMQuant/glycanBuilderGUI.py
+glycanPRMQuant/glycanBuilder_improved.py
 glycanPRMQuant/glycanClassification.py
 glycanPRMQuant/glycanClassificationUI.py
 glycanPRMQuant/glycantypeBarplot.py
@@ -22,6 +25,7 @@ glycanPRMQuant/skylineTransition.py
 glycanPRMQuant.egg-info/PKG-INFO
 glycanPRMQuant.egg-info/SOURCES.txt
 glycanPRMQuant.egg-info/dependency_links.txt
+glycanPRMQuant.egg-info/entry_points.txt
 glycanPRMQuant.egg-info/requires.txt
 glycanPRMQuant.egg-info/top_level.txt
 tests/__init__.py

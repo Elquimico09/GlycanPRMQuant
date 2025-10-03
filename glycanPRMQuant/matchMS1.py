@@ -1,7 +1,8 @@
 import pandas as pd
-import numpy as np
+import os
+from .constants import PROTON_MASS, NH4_MASS, DEFAULT_PRECURSOR_DB
 
-def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_offset=0.0):
+def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_offset=0.0, db_path=None):
     """
     Match MS1 data with glycan database by computing adduct m/z values
     from the neutral mass column 'M'. Supports +2H, +3H, +4H, +H+NH4+, and +2NH4 adducts.
@@ -11,17 +12,20 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
     :param mz_min: Minimum m/z value to consider.
     :param mz_max: Maximum m/z value to consider.
     :param mz_offset: Amount (in Da) to add to all calculated adduct m/z values.
+    :param mass_offset: Amount (in Da) to add to neutral masses in database.
+    :param db_path: Path to glycan database Excel file. If None, uses default.
     :return: DataFrame with columns ['precursor_mz','Glycan'].
     """
-    PROTON_MASS = 1.007276
-    NH4_MASS   = 18.033825
-
-
-        
-
     print(f"Starting MS1 matching with ±{ppm_tol} ppm tolerance")
     print("Loading glycan database...")
-    db = pd.read_excel("database/glycan_precursor_mz_list.xlsx")
+
+    if db_path is None:
+        db_path = DEFAULT_PRECURSOR_DB
+
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database file not found: {db_path}")
+
+    db = pd.read_excel(db_path)
     print(f"Loaded {len(db)} glycan entries")
 
     required_cols = ['Composition', '[M]']

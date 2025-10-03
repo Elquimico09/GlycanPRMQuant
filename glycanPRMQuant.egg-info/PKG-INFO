@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: glycanPRMQuant
 Version: 0.1.0
 Summary: A package for glycan PRM quantification
@@ -15,3 +15,13 @@ Requires-Dist: statsmodels
 Requires-Dist: scikit-learn
 Requires-Dist: openpyxl
 Requires-Dist: pyteomics
+Requires-Dist: networkx
+Provides-Extra: gui
+Requires-Dist: PyQt5>=5.15.0; extra == "gui"
+Dynamic: author
+Dynamic: author-email
+Dynamic: license
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

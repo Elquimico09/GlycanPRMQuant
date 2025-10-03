@@ -1,10 +1,8 @@
-import os
-import time
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-
 from scipy.spatial import cKDTree
+from .constants import PROTON_MASS, NH4_MASS, DEFAULT_FRAGMENT_DB
+import os
 
 def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
     """
@@ -54,18 +52,23 @@ def matchMS2(
     precursor_composition: str,
     mz_tol: float = 0.02,
     intensity_threshold: float = 1e2,
-    ppm_tol: float = 10
+    ppm_tol: float = 10,
+    db_path: str = None
 ) -> pd.DataFrame:
     """
-    Vectorized MS2 matching using cKDTree on theoretical adduct m/z’s.
+    Vectorized MS2 matching using cKDTree on theoretical adduct m/z's.
     NH4 adducts are only included if glycan starts with '2'.
+
+    :param db_path: Path to fragment database CSV file. If None, uses default.
     """
-
-    PROTON = 1.007276
-    NH4    = 18.033826
-
     # 1) load & filter fragment database
-    db = pd.read_csv("database/fragment_database.csv")
+    if db_path is None:
+        db_path = DEFAULT_FRAGMENT_DB
+
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Fragment database file not found: {db_path}")
+
+    db = pd.read_csv(db_path)
     db['Glycan'] = db['Glycan'].astype(str)
     dbf = db.loc[db['Glycan'] == precursor_composition].copy()
     if dbf.empty:
@@ -77,13 +80,13 @@ def matchMS2(
     table = []
     # +H (1+)
     table.append(pd.DataFrame({
-        'Theo_mz': dbf['Fragment Mass'] + PROTON,
+        'Theo_mz': dbf['Fragment Mass'] + PROTON_MASS,
         'Fragment': dbf['Fragment'],
         'Charge': 1
     }))
     # +2H (2+)
     table.append(pd.DataFrame({
-        'Theo_mz': (dbf['Fragment Mass'] + 2*PROTON) / 2,
+        'Theo_mz': (dbf['Fragment Mass'] + 2*PROTON_MASS) / 2,
         'Fragment': dbf['Fragment'],
         'Charge': 2
     }))
@@ -91,13 +94,13 @@ def matchMS2(
     if str(precursor_composition).startswith('2'):
         # +NH4 (1+)
         table.append(pd.DataFrame({
-            'Theo_mz': dbf['Fragment Mass'] + NH4,
+            'Theo_mz': dbf['Fragment Mass'] + NH4_MASS,
             'Fragment': dbf['Fragment'],
             'Charge': 1
         }))
         # +H+NH4 (2+)
         table.append(pd.DataFrame({
-            'Theo_mz': (dbf['Fragment Mass'] + PROTON + NH4) / 2,
+            'Theo_mz': (dbf['Fragment Mass'] + PROTON_MASS + NH4_MASS) / 2,
             'Fragment': dbf['Fragment'],
             'Charge': 2
         }))
