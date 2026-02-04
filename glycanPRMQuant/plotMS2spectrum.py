@@ -135,7 +135,9 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=None,
     if save_path:
         fig.savefig(save_path, dpi=300)
         print(f"Saved plot to {save_path}")
+        plt.close(fig)
     else:
         plt.show()
+        plt.close(fig)
 
     return frag_charge_avg

@@ -4,6 +4,20 @@ from scipy.spatial import cKDTree
 from .constants import PROTON_MASS, NH4_MASS, DEFAULT_FRAGMENT_DB
 import os
 
+def _normalize_glycan(val):
+    if pd.isna(val):
+        return ""
+    s = str(val).strip()
+    try:
+        f = float(s)
+        if f.is_integer():
+            return str(int(f))
+    except ValueError:
+        pass
+    if s.endswith(".0"):
+        return s[:-2]
+    return s
+
 def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
     """
     Fast 1D clustering: sort mzs, start a new cluster whenever the gap > tol.
@@ -70,7 +84,9 @@ def matchMS2(
 
     db = pd.read_csv(db_path)
     db['Glycan'] = db['Glycan'].astype(str)
-    dbf = db.loc[db['Glycan'] == precursor_composition].copy()
+    precursor_composition = _normalize_glycan(precursor_composition)
+    db['Glycan_norm'] = db['Glycan'].apply(_normalize_glycan)
+    dbf = db.loc[db['Glycan_norm'] == precursor_composition].copy()
     if dbf.empty:
         print(f"No database entries for {precursor_composition}")
         return pd.DataFrame()
@@ -82,13 +98,15 @@ def matchMS2(
     table.append(pd.DataFrame({
         'Theo_mz': dbf['Fragment Mass'] + PROTON_MASS,
         'Fragment': dbf['Fragment'],
-        'Charge': 1
+        'Charge': 1,
+        'Adduct': '+H'
     }))
     # +2H (2+)
     table.append(pd.DataFrame({
         'Theo_mz': (dbf['Fragment Mass'] + 2*PROTON_MASS) / 2,
         'Fragment': dbf['Fragment'],
-        'Charge': 2
+        'Charge': 2,
+        'Adduct': '+2H'
     }))
     # conditional NH4 adducts
     if str(precursor_composition).startswith('2'):
@@ -96,45 +114,47 @@ def matchMS2(
         table.append(pd.DataFrame({
             'Theo_mz': dbf['Fragment Mass'] + NH4_MASS,
             'Fragment': dbf['Fragment'],
-            'Charge': 1
+            'Charge': 1,
+            'Adduct': '+NH4'
         }))
         # +H+NH4 (2+)
         table.append(pd.DataFrame({
             'Theo_mz': (dbf['Fragment Mass'] + PROTON_MASS + NH4_MASS) / 2,
             'Fragment': dbf['Fragment'],
-            'Charge': 2
+            'Charge': 2,
+            'Adduct': '+H+NH4'
         }))
 
     adduct_df = pd.concat(table, ignore_index=True)
     theo_mzs   = adduct_df['Theo_mz'].to_numpy()
     tree       = cKDTree(theo_mzs.reshape(-1,1))
 
-    # 3) select MS2 rows whose precursor_mz matches an MS1 precursor
+    # 3) select MS2 rows whose precursor_mz matches an MS1 precursor (track adduct per precursor)
     precursor_matched_data = precursor_matched_data.copy()
     precursor_matched_data['Glycan'] = (
-    precursor_matched_data['Glycan']
-    .astype(str)
-    .str.strip()                  # remove leading/trailing spaces
-    )
-    precs = (
         precursor_matched_data['Glycan']
-        .str.split(';')
-        .apply(lambda comps: precursor_composition in [c.strip() for c in comps])
+        .astype(str)
+        .apply(_normalize_glycan)
     )
-    matched_precs = precursor_matched_data.loc[precs, 'precursor_mz'].unique()
-    if matched_precs.size == 0:
+    prec_rows = precursor_matched_data[
+        precursor_matched_data['Glycan'] == precursor_composition
+    ][['precursor_mz', 'Adduct']]
+    if prec_rows.empty:
         print(f"No MS1 precursor matches for {precursor_composition}")
         return pd.DataFrame()
 
     filt = []
-    for p in matched_precs:
+    for _, row in prec_rows.iterrows():
+        p = row['precursor_mz']
+        adduct_label = row['Adduct']
         tol = p * ppm_tol / 1e6
         sel = ms2_extracted_data[
             ms2_extracted_data['precursor_mz'].between(p-tol, p+tol) &
             (ms2_extracted_data['fragment_intensity'] >= intensity_threshold)
         ]
         if not sel.empty:
-            filt.append(sel.assign(Glycan=precursor_composition))
+            filt.append(sel.assign(Glycan=precursor_composition,
+                                   PrecursorAdduct=adduct_label))
     if not filt:
         print(f"No MS2 data after filtering for {precursor_composition}")
         return pd.DataFrame()
@@ -148,7 +168,7 @@ def matchMS2(
     neighbors = tree.query_ball_point(obs_mzs.reshape(-1,1), r=mz_tol)
 
     matched = []
-    base_cols = ['scan_number', 'rt', 'precursor_mz', 'fragment_intensity', 'Glycan']
+    base_cols = ['scan_number', 'rt', 'precursor_mz', 'fragment_intensity', 'Glycan', 'PrecursorAdduct']
     base_data = ms2f[base_cols].to_dict('records')
 
     for i, nbrs in enumerate(neighbors):
@@ -164,7 +184,8 @@ def matchMS2(
             'Charge':      int(hit['Charge']),
             'Fragment_mz': float(hit['Theo_mz']),
             'mz_diff':     float(diff),
-            'ppm_error':   float(diff / hit['Theo_mz'] * 1e6)
+            'ppm_error':   float(diff / hit['Theo_mz'] * 1e6),
+            'Adduct':      hit['Adduct']
         })
         matched.append(row)
 

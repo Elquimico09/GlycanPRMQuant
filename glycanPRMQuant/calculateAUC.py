@@ -11,7 +11,8 @@ def calculateAUC(
     scan_col: str = 'scan_number',
     rt_col: str = 'rt',
     intensity_col: str = 'fragment_intensity',
-    rel_height: float = 0.9,
+    adduct_col: str = 'Adduct',
+    rel_height: float = 0.7,
     prominence: float = None,
     smoothing_window: int = 30,
     plot: bool = False,
@@ -19,9 +20,10 @@ def calculateAUC(
     window = 0
 ) -> pd.DataFrame:
     """
-    Calculate AUC for each glycan by optionally smoothing the summed fragment-intensity chromatogram,
-    detecting the main peak, determining its boundaries at a relative height, and integrating
-    the (smoothed or raw) intensity between those boundaries.
+    Calculate AUC for each glycan/adduct by optionally smoothing the summed fragment-intensity
+    chromatogram, detecting the main peak, determining its boundaries at a relative height,
+    and integrating the (smoothed or raw) intensity between those boundaries. Also returns a
+    glycan-level total that sums AUCs across all adducts for that glycan.
 
     smoothing_window <= 0 will skip smoothing.
 
@@ -48,8 +50,10 @@ def calculateAUC(
 
     Returns
     -------
-    pd.DataFrame
-        Columns [glycan_col, 'peak_rt', 'start_rt', 'end_rt', 'AUC'].
+    tuple[pd.DataFrame, pd.DataFrame]
+        (per_adduct_df, total_df)
+        per_adduct_df columns: [glycan_col, adduct_col, 'peak_rt', 'start_rt', 'end_rt', 'AUC']
+        total_df      columns: [glycan_col, 'AUC'] (AUC summed across adducts per glycan)
     """
     # load data
     if isinstance(ms2_input, str):
@@ -68,16 +72,21 @@ def calculateAUC(
     if missing:
         raise ValueError(f"Missing columns: {missing}")
 
+    # If adduct column is absent, treat all signal as one pseudo-adduct so grouping works
+    if adduct_col not in df.columns:
+        df = df.copy()
+        df[adduct_col] = 'ALL'
+
     # sum per scan for each glycan
     summed = (
-        df.groupby([glycan_col, scan_col])
+        df.groupby([glycan_col, adduct_col, scan_col])
           .agg(rt=(rt_col, 'first'),
                summed_intensity=(intensity_col, 'sum'))
           .reset_index()
     )
 
     results = []
-    for glycan, sub in summed.groupby(glycan_col):
+    for (glycan, adduct), sub in summed.groupby([glycan_col, adduct_col]):
         sub = sub.sort_values('rt')
         x = sub['rt'].to_numpy()
         y = sub['summed_intensity'].to_numpy()
@@ -119,6 +128,7 @@ def calculateAUC(
         )
         results.append({
             glycan_col: glycan,
+            adduct_col: adduct,
             'peak_rt': peak_rt,
             'start_rt': start_rt,
             'end_rt': end_rt,
@@ -139,7 +149,7 @@ def calculateAUC(
             ax.set_ylabel('Intensity')
             plt.xlim(x.min()-window, x.max()+window)
             plt.ylim(0, y_smooth.max() * 1.1)
-            ax.set_title(f"{glycan}: Integration Window")
+            ax.set_title(f"{glycan} ({adduct}): Integration Window")
             plt.tight_layout()
             if save_path:
                 plt.savefig(save_path, dpi=300)
@@ -147,5 +157,7 @@ def calculateAUC(
             else:
                 plt.show()
 
-    return pd.DataFrame(results)
+    per_adduct_df = pd.DataFrame(results)
+    total_df = per_adduct_df.groupby(glycan_col, as_index=False)['AUC'].sum()
+    return per_adduct_df, total_df
 
