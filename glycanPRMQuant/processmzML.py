@@ -158,6 +158,16 @@ def process_mzml_pipeline(
         print("No MS1 matches; done.")
         return
 
+    # Pre-filter MS2 by matched precursor m/z values (speed-up)
+    precs = ms1_results['precursor_mz'].unique()
+    if precs.size > 0:
+        mask = pd.Series(False, index=ms2_data.index)
+        for p in precs:
+            tol = p * ppm_ms2_tol / 1e6
+            mask |= ms2_data['precursor_mz'].between(p - tol, p + tol)
+        ms2_data = ms2_data.loc[mask].reset_index(drop=True)
+        print(f" → Pre-filtered MS2 to {len(ms2_data)} rows for matched precursors")
+
     all_matched = []
 
     # build clean glycan list

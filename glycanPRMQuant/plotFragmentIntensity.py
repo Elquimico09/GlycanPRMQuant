@@ -155,12 +155,20 @@ def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
             plt.show()
         return
 
-    # Aggregate per scan + group (no zero-filling across missing scans)
-    agg = (
-        df.groupby(['scan_number', 'rt', group_col])
-          .agg(sum_intensity=('fragment_intensity', 'sum'))
-          .reset_index()
-    )
+    # Aggregate per scan + group (optionally keep adduct to avoid zig-zag from interleaved scans)
+    split_by_adduct = (group_col == 'Fragment') and ('PrecursorAdduct' in df.columns)
+    if split_by_adduct:
+        agg = (
+            df.groupby(['scan_number', 'rt', group_col, 'PrecursorAdduct'])
+              .agg(sum_intensity=('fragment_intensity', 'sum'))
+              .reset_index()
+        )
+    else:
+        agg = (
+            df.groupby(['scan_number', 'rt', group_col])
+              .agg(sum_intensity=('fragment_intensity', 'sum'))
+              .reset_index()
+        )
 
     # Determine top N groups by total observed intensity
     totals_by_group = agg.groupby(group_col)['sum_intensity'].sum().sort_values(ascending=False)
@@ -179,30 +187,45 @@ def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
 
     # Compute total as sum of per-group traces on the common grid
     total_y = np.zeros_like(total_x, dtype=float)
+    per_group_traces = {}
     for g in top_groups:
-        sub = agg[agg[group_col] == g].sort_values('rt')
-        x = sub['rt'].values
-        y = sub['sum_intensity'].values
-        if x.size == 0:
-            continue
-        y_interp = np.interp(total_x, x, y, left=0.0, right=0.0)
-        if window and window > 0:
-            y_interp = _smooth_signal(y_interp, smoothing_method, window)
-        total_y += y_interp
+        if split_by_adduct:
+            frag_sub = agg[agg[group_col] == g]
+            if frag_sub.empty:
+                continue
+            frag_y = np.zeros_like(total_x, dtype=float)
+            for adduct in frag_sub['PrecursorAdduct'].unique().tolist():
+                sub = frag_sub[frag_sub['PrecursorAdduct'] == adduct].sort_values('rt')
+                x = sub['rt'].values
+                y = sub['sum_intensity'].values
+                if x.size == 0:
+                    continue
+                y_interp = np.interp(total_x, x, y, left=0.0, right=0.0)
+                if window and window > 0:
+                    y_interp = _smooth_signal(y_interp, smoothing_method, window)
+                frag_y += y_interp
+            per_group_traces[g] = frag_y
+            total_y += frag_y
+        else:
+            sub = agg[agg[group_col] == g].sort_values('rt')
+            x = sub['rt'].values
+            y = sub['sum_intensity'].values
+            if x.size == 0:
+                continue
+            y_interp = np.interp(total_x, x, y, left=0.0, right=0.0)
+            if window and window > 0:
+                y_interp = _smooth_signal(y_interp, smoothing_method, window)
+            per_group_traces[g] = y_interp
+            total_y += y_interp
 
     # Plotting (each group on the common RT grid so totals align)
     fig, ax = plt.subplots(figsize=figsize)
     labels = {g: f"{g}" for g in top_groups}
     for g in sorted(top_groups):
-        sub = agg[agg[group_col] == g].sort_values('rt')
-        x = sub['rt'].values
-        y = sub['sum_intensity'].values
-        if x.size == 0:
+        if g not in per_group_traces:
             continue
-        y = np.interp(total_x, x, y, left=0.0, right=0.0)
-        if window and window > 0:
-            y = _smooth_signal(y, smoothing_method, window)
         x = total_x
+        y = per_group_traces[g]
         line, = ax.plot(
             x,
             y,

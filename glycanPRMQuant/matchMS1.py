@@ -2,6 +2,8 @@ import pandas as pd
 import os
 from .constants import PROTON_MASS, NH4_MASS, DEFAULT_PRECURSOR_DB
 
+_DB_CACHE = {}
+
 def _normalize_glycan(val):
     if pd.isna(val):
         return ""
@@ -16,6 +18,33 @@ def _normalize_glycan(val):
     if s.endswith(".0"):
         return s[:-2]
     return s
+
+def _load_precursor_db(db_path: str, mass_offset: float = 0.0, mz_offset: float = 0.0) -> pd.DataFrame:
+    key = (db_path, mass_offset, mz_offset)
+    if key in _DB_CACHE:
+        return _DB_CACHE[key].copy()
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database file not found: {db_path}")
+    db = pd.read_excel(db_path)
+    required_cols = ['Composition', '[M]']
+    for col in required_cols:
+        if col not in db.columns:
+            raise ValueError(f"Missing required column '{col}' in the database")
+    if mass_offset != 0.0:
+        print(f"Applying mass offset of {mass_offset} Da to all Glycans")
+        db = db.copy()
+        db['[M]'] = db['[M]'] + mass_offset
+    db = db.copy()
+    db['mz_2H']     = (db['[M]'] + 2*PROTON_MASS)    / 2
+    db['mz_3H']     = (db['[M]'] + 3*PROTON_MASS)    / 3
+    db['mz_4H']     = (db['[M]'] + 4*PROTON_MASS)    / 4
+    db['mz_H_NH4']  = (db['[M]'] + PROTON_MASS + NH4_MASS) / 2
+    db['mz_2NH4']   = (db['[M]'] + 2*NH4_MASS)        / 2
+    if mz_offset:
+        print(f"Applying m/z offset of {mz_offset} Da to all adducts")
+        db[['mz_2H','mz_3H','mz_4H','mz_H_NH4','mz_2NH4']] = db[['mz_2H','mz_3H','mz_4H','mz_H_NH4','mz_2NH4']] + mz_offset
+    _DB_CACHE[key] = db
+    return db.copy()
 
 def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_offset=0.0, db_path=None):
     """
@@ -36,30 +65,8 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
 
     if db_path is None:
         db_path = DEFAULT_PRECURSOR_DB
-
-    if not os.path.exists(db_path):
-        raise FileNotFoundError(f"Database file not found: {db_path}")
-
-    db = pd.read_excel(db_path)
+    db = _load_precursor_db(db_path, mass_offset=mass_offset, mz_offset=mz_offset)
     print(f"Loaded {len(db)} glycan entries")
-
-    required_cols = ['Composition', '[M]']
-    for col in required_cols:
-        if col not in db.columns:
-            raise ValueError(f"Missing required column '{col}' in the database")
-
-    if mass_offset != 0.0:
-        print(f"Applying mass offset of {mass_offset} Da to all Glycans")
-        db['[M]'] = db['[M]'] + mass_offset
-        
-
-    # Compute adduct m/z values from neutral mass 'M'
-    db = db.copy()
-    db['mz_2H']     = (db['[M]'] + 2*PROTON_MASS)    / 2
-    db['mz_3H']     = (db['[M]'] + 3*PROTON_MASS)    / 3
-    db['mz_4H']     = (db['[M]'] + 4*PROTON_MASS)    / 4
-    db['mz_H_NH4']  = (db['[M]'] + PROTON_MASS + NH4_MASS) / 2
-    db['mz_2NH4']   = (db['[M]'] + 2*NH4_MASS)        / 2
 
     adduct_cols = ['mz_2H','mz_3H','mz_4H','mz_H_NH4','mz_2NH4']
     adduct_labels = {
@@ -69,11 +76,6 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
         'mz_H_NH4': 'H+NH4',
         'mz_2NH4':  '2NH4'
     }
-
-    # Apply global offset if requested
-    if mz_offset:
-        print(f"Applying m/z offset of {mz_offset} Da to all adducts")
-        db[adduct_cols] = db[adduct_cols] + mz_offset
 
     # Filter MS1 data to m/z range
     ms1 = ms1_data[

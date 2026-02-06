@@ -4,6 +4,8 @@ from scipy.spatial import cKDTree
 from .constants import PROTON_MASS, NH4_MASS, DEFAULT_FRAGMENT_DB
 import os
 
+_FRAG_DB_CACHE = {}
+
 def _normalize_glycan(val):
     if pd.isna(val):
         return ""
@@ -17,6 +19,15 @@ def _normalize_glycan(val):
     if s.endswith(".0"):
         return s[:-2]
     return s
+
+def _load_fragment_db(db_path: str) -> pd.DataFrame:
+    if db_path in _FRAG_DB_CACHE:
+        return _FRAG_DB_CACHE[db_path]
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Fragment database file not found: {db_path}")
+    db = pd.read_csv(db_path)
+    _FRAG_DB_CACHE[db_path] = db
+    return db
 
 def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
     """
@@ -79,10 +90,7 @@ def matchMS2(
     if db_path is None:
         db_path = DEFAULT_FRAGMENT_DB
 
-    if not os.path.exists(db_path):
-        raise FileNotFoundError(f"Fragment database file not found: {db_path}")
-
-    db = pd.read_csv(db_path)
+    db = _load_fragment_db(db_path)
     db['Glycan'] = db['Glycan'].astype(str)
     precursor_composition = _normalize_glycan(precursor_composition)
     db['Glycan_norm'] = db['Glycan'].apply(_normalize_glycan)
