@@ -92,6 +92,18 @@ class PipelineGUI(tk.Tk):
         self.mz_offset = self._param_vars["m/z offset"]
         self.rel_height = self._param_vars["AUC rel. height"]
 
+        # Smoothing method selector
+        tk.Label(self.inner, text="Smoothing method").grid(column=0, row=row, sticky="w", padx=5, pady=5)
+        self.smoothing_method = tk.StringVar(value="gaussian")
+        ttk.Combobox(
+            self.inner,
+            textvariable=self.smoothing_method,
+            values=["gaussian", "savgol"],
+            state="readonly",
+            width=12
+        ).grid(column=1, row=row, padx=5, pady=5, sticky="w")
+        row += 1
+
         # Toggles
         self.overwrite_var = tk.BooleanVar(value=False)
         self.dryrun_var = tk.BooleanVar(value=False)
@@ -163,6 +175,7 @@ class PipelineGUI(tk.Tk):
                 "ppm_ms2_tol":         float(self.ppm_ms2_tol.get()),
                 "mz_tol":              float(self.mz_tol.get()),
                 "smoothing_window":    int(self.smoothing_window.get()),
+                "smoothing_method":    self.smoothing_method.get(),
                 "mass_offset":         float(self.mass_offset.get()),
                 "mz_offset":           float(self.mz_offset.get()),
                 "rel_height":          float(self.rel_height.get()),
@@ -319,6 +332,7 @@ class PipelineGUI(tk.Tk):
                 self.ppm_ms2_tol.set(str(prefs.get("ppm_ms2_tol",10)))
                 self.mz_tol.set(str(prefs.get("mz_tol",0.02)))
                 self.smoothing_window.set(str(prefs.get("smoothing_window",5)))
+                self.smoothing_method.set(str(prefs.get("smoothing_method","gaussian")))
                 self.mass_offset.set(str(prefs.get("mass_offset",0.0)))
                 self.mz_offset.set(str(prefs.get("mz_offset",0.0)))
                 self.rel_height.set(str(prefs.get("rel_height",0.7)))
@@ -341,6 +355,7 @@ class PipelineGUI(tk.Tk):
             "ppm_ms2_tol": self.ppm_ms2_tol.get(),
             "mz_tol": self.mz_tol.get(),
             "smoothing_window": self.smoothing_window.get(),
+            "smoothing_method": self.smoothing_method.get(),
             "mass_offset": self.mass_offset.get(),
             "mz_offset": self.mz_offset.get(),
             "rel_height": self.rel_height.get(),

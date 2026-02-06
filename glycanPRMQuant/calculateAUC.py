@@ -4,6 +4,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_widths
 from scipy.ndimage import gaussian_filter1d
+from scipy.signal import savgol_filter
+
+def _smooth_signal(y, method: str, window: int):
+    if not window or window <= 0:
+        return y
+    method = (method or "gaussian").lower()
+    if method in ("gaussian", "gauss"):
+        return gaussian_filter1d(y, sigma=window, mode='nearest')
+    if method in ("savgol", "sav-gol", "savitzky-golay", "sg"):
+        n = len(y)
+        if n < 3:
+            return y
+        win = int(window)
+        if win % 2 == 0:
+            win += 1
+        if win < 3:
+            win = 3
+        if win > n:
+            win = n if n % 2 == 1 else n - 1
+            if win < 3:
+                return y
+        return savgol_filter(y, window_length=win, polyorder=2, mode='nearest')
+    return y
 
 def calculateAUC(
     ms2_input,
@@ -15,6 +38,7 @@ def calculateAUC(
     rel_height: float = 0.7,
     prominence: float = None,
     smoothing_window: int = 30,
+    smoothing_method: str = "gaussian",
     plot: bool = False,
     save_path: str = None,
     window = 0
@@ -44,7 +68,9 @@ def calculateAUC(
     prominence : float or None
         Minimum peak prominence passed to find_peaks.
     smoothing_window : int
-        Number of scans for centered moving-average smoothing (if > 0).
+        Smoothing window. For Gaussian, this is sigma. For Sav-Gol, this is window length.
+    smoothing_method : str
+        "gaussian" (default) or "savgol".
     plot : bool
         If True, plot smoothed vs raw chromatogram and integration window.
 
@@ -93,9 +119,7 @@ def calculateAUC(
 
         # apply smoothing if requested
         if smoothing_window and smoothing_window > 0:
-            y_smooth = gaussian_filter1d(
-                y, sigma=smoothing_window, mode='nearest'
-            )
+            y_smooth = _smooth_signal(y, smoothing_method, smoothing_window)
         else:
             y_smooth = y
 
@@ -140,7 +164,7 @@ def calculateAUC(
         if plot:
             fig, ax = plt.subplots(figsize=(2.5,3))
             ax.plot(x, y_smooth, label=(
-                f'smoothed (w={smoothing_window})'
+                f'smoothed ({smoothing_method}, w={smoothing_window})'
                 if smoothing_window and smoothing_window > 0 else 'raw'
             ))
             ax.axvspan(start_rt, end_rt, color='red', alpha=0.1,

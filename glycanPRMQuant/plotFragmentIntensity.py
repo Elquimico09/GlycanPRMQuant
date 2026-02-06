@@ -3,13 +3,36 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
+from scipy.signal import savgol_filter
 import scienceplots
 
+def _smooth_signal(y, method: str, window: int):
+    if not window or window <= 0:
+        return y
+    method = (method or "gaussian").lower()
+    if method in ("gaussian", "gauss"):
+        return gaussian_filter1d(y, sigma=window, mode='nearest')
+    if method in ("savgol", "sav-gol", "savitzky-golay", "sg"):
+        n = len(y)
+        if n < 3:
+            return y
+        win = int(window)
+        if win % 2 == 0:
+            win += 1
+        if win < 3:
+            win = 3
+        if win > n:
+            win = n if n % 2 == 1 else n - 1
+            if win < 3:
+                return y
+        return savgol_filter(y, window_length=win, polyorder=2, mode='nearest')
+    return y
+
 def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
-                       figsize=(10, 5), group_col='Fragment'):
+                       figsize=(10, 5), group_col='Fragment', smoothing_method: str = "gaussian"):
     """
     Reads an MS2 results CSV file, aggregates fragment data per scan grouped by `group_col`,
-    applies Gaussian smoothing if window > 0, and plots summed intensity vs. RT
+    applies smoothing if window > 0, and plots summed intensity vs. RT
     with one smoothed line per group plus the total intensity line, shading under each curve.
 
     Parameters
@@ -17,7 +40,10 @@ def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
     ms2_csv_file : str
         Path to the MS2 CSV file.
     window : int
-        Sigma for Gaussian smoothing (in number of scans). If <= 0, no smoothing.
+        Smoothing window. For Gaussian, this is sigma. For Sav-Gol, this is window length.
+        If <= 0, no smoothing.
+    smoothing_method : str
+        "gaussian" (default) or "savgol".
     top_n : int or None
         If provided and group_col is not None, plot only the top N groups by total unsmoothed intensity.
     save_path : str or None
@@ -54,7 +80,7 @@ def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
         x = total['rt']
         y = total['fragment_intensity']
         if window and window > 0:
-            y = gaussian_filter1d(y, sigma=window, mode='nearest')
+            y = _smooth_signal(y, smoothing_method, window)
             title_suffix = ""
         else:
             title_suffix = " (raw)"
@@ -103,10 +129,10 @@ def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
     # Apply Gaussian smoothing if requested
     if window and window > 0:
         smoothed = data.apply(
-            lambda col: gaussian_filter1d(col, sigma=window, mode='nearest'),
+            lambda col: _smooth_signal(col.values, smoothing_method, window),
             axis=0
         )
-        total_smoothed = gaussian_filter1d(total_intensity.values, sigma=window, mode='nearest')
+        total_smoothed = _smooth_signal(total_intensity.values, smoothing_method, window)
         title_suffix = ""
     else:
         smoothed = data

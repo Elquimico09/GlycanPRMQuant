@@ -86,9 +86,11 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
     print(f"{len(unique_prec)} unique precursor m/z values to match")
 
     matches = []
+    total_matches = 0
 
     for i, prec in enumerate(unique_prec, 1):
         if i % 100 == 0:
+            total_matches = len(matches)
             print(f"  Processed {i}/{len(unique_prec)} precursors, {total_matches} matches so far")
         tol = prec * ppm_tol / 1e6
 

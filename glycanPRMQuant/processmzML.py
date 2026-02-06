@@ -7,6 +7,30 @@ from glycanPRMQuant.matchMS2     import matchMS2
 from glycanPRMQuant.calculateAUC import calculateAUC
 from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments
 from glycanPRMQuant.plotMS2spectrum   import plotMS2spectrum
+from scipy.ndimage import gaussian_filter1d
+from scipy.signal import savgol_filter
+
+def _smooth_signal(y, method: str, window: int):
+    if not window or window <= 0:
+        return y
+    method = (method or "gaussian").lower()
+    if method in ("gaussian", "gauss"):
+        return gaussian_filter1d(y, sigma=window, mode='nearest')
+    if method in ("savgol", "sav-gol", "savitzky-golay", "sg"):
+        n = len(y)
+        if n < 3:
+            return y
+        win = int(window)
+        if win % 2 == 0:
+            win += 1
+        if win < 3:
+            win = 3
+        if win > n:
+            win = n if n % 2 == 1 else n - 1
+            if win < 3:
+                return y
+        return savgol_filter(y, window_length=win, polyorder=2, mode='nearest')
+    return y
 
 def _normalize_glycan(val):
     if pd.isna(val):
@@ -22,6 +46,50 @@ def _normalize_glycan(val):
         return s[:-2]
     return s
 
+def _compute_glycan_apex_rt(all_df: pd.DataFrame, smoothing_window: int, smoothing_method: str) -> dict:
+    apex = {}
+    if all_df.empty:
+        return apex
+    summed = (
+        all_df.groupby(['Glycan', 'scan_number'])
+              .agg(rt=('rt', 'first'),
+                   summed_intensity=('fragment_intensity', 'sum'))
+              .reset_index()
+    )
+    for glycan, sub in summed.groupby('Glycan'):
+        sub = sub.sort_values('rt')
+        x = sub['rt'].to_numpy()
+        y = sub['summed_intensity'].to_numpy()
+        if smoothing_window and smoothing_window > 0:
+            y = _smooth_signal(y, smoothing_method, smoothing_window)
+        if y.size == 0:
+            continue
+        apex[glycan] = float(x[int(y.argmax())])
+    return apex
+
+def _resolve_precursor_conflicts(all_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    For identical precursor_mz values that map to multiple glycans, keep the glycan
+    with the most fragment matches and (tie-breaker) highest total fragment intensity.
+    """
+    if all_df.empty:
+        return all_df
+    scores = (
+        all_df.groupby(['precursor_mz', 'Glycan'])
+              .agg(
+                  frag_count=('fragment_mz', 'size'),
+                  total_intensity=('fragment_intensity', 'sum')
+              )
+              .reset_index()
+    )
+    scores = scores.sort_values(
+        ['precursor_mz', 'frag_count', 'total_intensity'],
+        ascending=[True, False, False]
+    )
+    winners = scores.drop_duplicates(subset=['precursor_mz'], keep='first')
+    winner_map = winners.set_index('precursor_mz')['Glycan'].to_dict()
+    return all_df[all_df['Glycan'] == all_df['precursor_mz'].map(winner_map)]
+
 def process_mzml_pipeline(
     mzml_file: str,
     output_dir: str,
@@ -34,6 +102,7 @@ def process_mzml_pipeline(
     ppm_ms2_tol: float = 10,
     mz_tol: float = 0.02,
     smoothing_window: int = 11,
+    smoothing_method: str = "gaussian",
     fragment_top_n: int = 10,
     spectrum_window_minutes: float = 2.0,
     enable_adduct_plots: bool = True,
@@ -79,12 +148,11 @@ def process_mzml_pipeline(
             if c and c.lower() != 'nan':
                 glycans.add(c)
 
-    # 3) For each glycan: match MS2, save CSV, plot
-    transitions = []
+    # 3) For each glycan: match MS2 (collect only)
     adduct_charge = {'2H':2,'3H':3,'4H':4,'H+NH4':2,'2NH4':2}
 
     for glycan in sorted(glycans):
-        print(f"Processing glycan {glycan!r}…")
+        print(f"Processing glycan {glycan!r}...")
         matched_ms2 = matchMS2(
             ms2_data,
             ms1_results,
@@ -94,42 +162,37 @@ def process_mzml_pipeline(
             intensity_threshold=intensity_threshold
         )
         if matched_ms2.empty:
-            print(f"  → No MS2 fragments for {glycan!r}")
+            print(f"  -> No MS2 fragments for {glycan!r}")
             continue
 
-        # **Normalize** Fragment_mz → fragment_mz so downstream code sees it
+        # **Normalize** Fragment_mz -> fragment_mz so downstream code sees it
         if 'Fragment_mz' in matched_ms2.columns:
             matched_ms2 = matched_ms2.rename(columns={'Fragment_mz': 'fragment_mz'})
 
         all_matched.append(matched_ms2)
 
-        # save CSV
+    if not all_matched:
+        print("No MS2 matches; done.")
+        return
+
+    # Resolve precursor conflicts across glycans
+    all_df = pd.concat(all_matched, ignore_index=True)
+    all_df = _resolve_precursor_conflicts(all_df)
+
+    # 4) For each glycan after conflict resolution: save CSV, plot
+    for glycan, sub in all_df.groupby('Glycan'):
         csv_path = os.path.join(output_dir, f"ms2_{glycan}.csv")
-        matched_ms2.to_csv(csv_path, index=False)
-        print(f"  → Wrote {len(matched_ms2)} MS2 matches to {csv_path}")
+        sub.to_csv(csv_path, index=False)
+        print(f"  -> Wrote {len(sub)} MS2 matches to {csv_path}")
 
-        # Collect transitions for Skyline (one per matched fragment row)
-        if skyline_transition:
-            charge = matched_ms2['PrecursorAdduct'].map(adduct_charge).fillna(0)
-            trans = pd.DataFrame({
-                'Glycan': matched_ms2['Glycan'],
-                'Adduct': matched_ms2['PrecursorAdduct'],
-                'Precursor m/z': matched_ms2['precursor_mz'],
-                'Precursor charge': charge.astype(int),
-                'Fragment m/z': matched_ms2['fragment_mz'],
-                'Fragment charge': matched_ms2['Charge'],
-                'Retention time': matched_ms2['rt']
-            })
-            transitions.append(trans)
-
-        # chromatogram
         # Chromatograms per fragment (legacy view)
         chrom_frag_svg = os.path.join(images_dir, f"ms2_{glycan}.svg")
         try:
             plot_ms2_fragments(csv_path, window=smoothing_window,
                                top_n=fragment_top_n, save_path=chrom_frag_svg,
-                               group_col='Fragment')
-            print(f"  → Saved fragment-level chromatogram to {chrom_frag_svg}")
+                               group_col='Fragment',
+                               smoothing_method=smoothing_method)
+            print(f"  -> Saved fragment-level chromatogram to {chrom_frag_svg}")
         except Exception as e:
             print(f"  [warn] Fragment chromatogram failed: {e}")
 
@@ -139,8 +202,9 @@ def process_mzml_pipeline(
             try:
                 plot_ms2_fragments(csv_path, window=smoothing_window,
                                    top_n=None, save_path=chrom_adduct_svg,
-                                   group_col='PrecursorAdduct')
-                print(f"  → Saved precursor-adduct chromatogram to {chrom_adduct_svg}")
+                                   group_col='PrecursorAdduct',
+                                   smoothing_method=smoothing_method)
+                print(f"  -> Saved precursor-adduct chromatogram to {chrom_adduct_svg}")
             except Exception as e:
                 print(f"  [warn] Precursor-adduct chromatogram failed: {e}")
 
@@ -150,8 +214,9 @@ def process_mzml_pipeline(
             try:
                 plot_ms2_fragments(csv_path, window=smoothing_window,
                                    top_n=None, save_path=chrom_total_svg,
-                                   group_col=None)
-                print(f"  → Saved total chromatogram to {chrom_total_svg}")
+                                   group_col=None,
+                                   smoothing_method=smoothing_method)
+                print(f"  -> Saved total chromatogram to {chrom_total_svg}")
             except Exception as e:
                 print(f"  [warn] Total chromatogram failed: {e}")
 
@@ -160,17 +225,16 @@ def process_mzml_pipeline(
         try:
             plotMS2spectrum(csv_path, window_minutes=spectrum_window_minutes,
                             top_n=fragment_top_n, save_path=spec_svg)
-            print(f"  → Saved spectrum to {spec_svg}")
+            print(f"  -> Saved spectrum to {spec_svg}")
         except Exception as e:
             print(f"  [warn] Spectrum plot failed: {e}")
-
-    # 4) AUC
-    if all_matched:
-        all_df = pd.concat(all_matched, ignore_index=True)
-        print("Calculating AUC…")
+# 4) AUC
+    if not all_df.empty:
+        print("Calculating AUC...")
         per_adduct_df, total_df = calculateAUC(
             all_df,
             smoothing_window=smoothing_window,
+            smoothing_method=smoothing_method,
             adduct_col='PrecursorAdduct',
             rel_height=rel_height
         )
@@ -178,16 +242,29 @@ def process_mzml_pipeline(
         # Total AUC (backward compatible filename)
         auc_path = os.path.join(output_dir, f"{base_name}_auc_values.csv")
         total_df.to_csv(auc_path, index=False)
-        print(f" → Wrote total AUC (summed across adducts) to {auc_path}")
+        print(f" -> Wrote total AUC (summed across adducts) to {auc_path}")
 
         # Per-adduct detail
         auc_adduct_path = os.path.join(output_dir, f"{base_name}_auc_values_by_adduct.csv")
         per_adduct_df.to_csv(auc_adduct_path, index=False)
-        print(f" → Wrote per-adduct AUC values to {auc_adduct_path}")
+        print(f" -> Wrote per-adduct AUC values to {auc_adduct_path}")
 
-    # 5) Skyline transition export
-    if skyline_transition and transitions:
-        trans_df = pd.concat(transitions, ignore_index=True)
+# 5) Skyline transition export (unique fragments, apex RT per glycan)
+    if skyline_transition and not all_df.empty:
+        apex_rt = _compute_glycan_apex_rt(all_df, smoothing_window, smoothing_method)
+        charge = all_df['PrecursorAdduct'].map(adduct_charge).fillna(0).astype(int)
+        trans_df = pd.DataFrame({
+            'Glycan': all_df['Glycan'],
+            'Adduct': all_df['PrecursorAdduct'],
+            'Precursor m/z': all_df['precursor_mz'],
+            'Precursor charge': charge,
+            'Fragment m/z': all_df['fragment_mz'],
+            'Fragment charge': all_df['Charge'],
+        })
+        trans_df = trans_df.drop_duplicates(subset=[
+            'Glycan', 'Adduct', 'Precursor m/z', 'Precursor charge', 'Fragment m/z', 'Fragment charge'
+        ])
+        trans_df['Retention time'] = trans_df['Glycan'].map(apex_rt)
         trans_path = os.path.join(output_dir, f"{base_name}_skyline_transitions.xlsx")
         trans_df.to_excel(trans_path, index=False)
         print(f" → Wrote Skyline transition list to {trans_path}")
