@@ -44,6 +44,46 @@ def _resample_uniform(rt, y):
     y_interp = np.interp(grid, rt, y)
     return grid, y_interp
 
+def _find_width_at_height(y: np.ndarray, peak_idx: int, height: float):
+    y = np.asarray(y, dtype=float)
+    n = y.size
+    if n == 0:
+        return 0.0, float(max(n - 1, 0))
+    peak_idx = int(np.clip(peak_idx, 0, n - 1))
+    height = float(height)
+
+    left_candidates = np.where(y[:peak_idx + 1] <= height)[0]
+    if left_candidates.size == 0:
+        left_ip = 0.0
+    else:
+        li = left_candidates[-1]
+        if li == peak_idx:
+            left_ip = float(li)
+        else:
+            y1, y2 = y[li], y[li + 1]
+            if y2 == y1:
+                left_ip = float(li)
+            else:
+                frac = (height - y1) / (y2 - y1)
+                left_ip = li + float(frac)
+
+    right_candidates = np.where(y[peak_idx:] <= height)[0]
+    if right_candidates.size == 0:
+        right_ip = float(n - 1)
+    else:
+        ri = peak_idx + right_candidates[0]
+        if ri == peak_idx:
+            right_ip = float(ri)
+        else:
+            y1, y2 = y[ri - 1], y[ri]
+            if y2 == y1:
+                right_ip = float(ri)
+            else:
+                frac = (height - y1) / (y2 - y1)
+                right_ip = (ri - 1) + float(frac)
+
+    return left_ip, right_ip
+
 def calculateAUC(
     ms2_input,
     glycan_col: str = 'Glycan',
@@ -52,6 +92,7 @@ def calculateAUC(
     intensity_col: str = 'fragment_intensity',
     adduct_col: str = 'Adduct',
     rel_height: float = 0.7,
+    rel_height_mode: str = "prominence",
     prominence: float = None,
     smoothing_window: int = 30,
     smoothing_method: str = "gaussian",
@@ -148,11 +189,17 @@ def calculateAUC(
         else:
             main_idx = peaks[np.argmax(y_smooth[peaks])]
 
-        # compute width at rel_height on y_smooth
-        widths, h_eval, left_ips, right_ips = peak_widths(
-            y_smooth, [main_idx], rel_height=rel_height
-        )
-        left_ip, right_ip = left_ips[0], right_ips[0]
+        # compute width at rel_height
+        mode = (rel_height_mode or "prominence").lower()
+        if mode in ("height", "peak", "absolute"):
+            peak_y = float(y_smooth[main_idx])
+            height_level = peak_y * (1.0 - float(rel_height))
+            left_ip, right_ip = _find_width_at_height(y_smooth, main_idx, height_level)
+        else:
+            widths, h_eval, left_ips, right_ips = peak_widths(
+                y_smooth, [main_idx], rel_height=rel_height
+            )
+            left_ip, right_ip = left_ips[0], right_ips[0]
 
         # map to retention time
         idxs = np.arange(len(x))
@@ -180,7 +227,7 @@ def calculateAUC(
         plt.rcParams['font.family'] = 'Arial'
 
         if plot:
-            fig, ax = plt.subplots(figsize=(2.5,3))
+            fig, ax = plt.subplots(figsize=(2,3.2))
             ax.plot(x, y_smooth, label=(
                 f'smoothed ({smoothing_method}, w={smoothing_window})'
                 if smoothing_window and smoothing_window > 0 else 'raw'

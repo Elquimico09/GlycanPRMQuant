@@ -23,6 +23,7 @@ def _process_one_file(
     enable_total_plots: bool = True,
     dry_run: bool = False,
     rel_height: float = 0.7,
+    rel_height_mode: str = "prominence",
     skyline_transition: bool = False,
     enable_smoothing: bool = True
 ):
@@ -60,6 +61,7 @@ def _process_one_file(
             enable_adduct_plots=enable_adduct_plots,
             enable_total_plots=enable_total_plots,
             rel_height=rel_height,
+            rel_height_mode=rel_height_mode,
             skyline_transition=skyline_transition,
             enable_smoothing=enable_smoothing
         )
@@ -87,6 +89,7 @@ def run_parallel_pipeline(
     enable_total_plots: bool = True,
     dry_run: bool = False,
     rel_height: float = 0.7,
+    rel_height_mode: str = "prominence",
     skyline_transition: bool = False,
     enable_smoothing: bool = True,
     log_queue=None,
@@ -144,6 +147,7 @@ def run_parallel_pipeline(
                     enable_total_plots,
                     dry_run,
                     rel_height,
+                    rel_height_mode,
                     skyline_transition,
                     enable_smoothing
                 ): path for path in mzml_files

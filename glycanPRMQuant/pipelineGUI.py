@@ -8,55 +8,130 @@ from tkinter import scrolledtext
 from tkinter import ttk
 from glycanPRMQuant.parallelProcess import run_parallel_pipeline
 
+
 class PipelineGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("glycanPRMQuant Parallel Pipeline")
-        self.geometry("640x740")
+        self.geometry("980x1080")
+        self.configure(bg="#0f172a")
         self.pipeline_proc = None
         self.log_queue = None
         self.progress_queue = None
         self.selected_files = []
         self._polling = False
         self._prefs_path = os.path.join(os.getcwd(), ".pipeline_gui_prefs.json")
+        self._init_style()
         self._build_widgets()
         self._load_prefs()
 
+    def _init_style(self):
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self._colors = {
+            "bg": "#0f172a",
+            "panel": "#111827",
+            "panel2": "#0b1220",
+            "text": "#e5e7eb",
+            "muted": "#9ca3af",
+            "accent": "#14b8a6",
+            "danger": "#ef4444",
+            "outline": "#1f2937",
+            "input": "#0b1020"
+        }
+
+        self.option_add("*Font", ("Segoe UI", 10))
+        style.configure("TLabel", background=self._colors["panel"], foreground=self._colors["text"])
+        style.configure("Muted.TLabel", background=self._colors["panel"], foreground=self._colors["muted"])
+        style.configure("Title.TLabel", background=self._colors["bg"], foreground=self._colors["text"],
+                        font=("Segoe UI Semibold", 16))
+        style.configure("Section.TLabel", background=self._colors["panel"], foreground=self._colors["text"],
+                        font=("Segoe UI Semibold", 11))
+        style.configure("TFrame", background=self._colors["panel"])
+        style.configure("Card.TFrame", background=self._colors["panel"], relief="flat")
+        style.configure("TButton", padding=(10, 6))
+        style.configure("Primary.TButton", background=self._colors["accent"], foreground="white")
+        style.map("Primary.TButton",
+                  background=[("active", "#0ea5a0"), ("disabled", "#1f2937")],
+                  foreground=[("disabled", "#9ca3af")])
+        style.configure("Danger.TButton", background=self._colors["danger"], foreground="white")
+        style.map("Danger.TButton",
+                  background=[("active", "#dc2626"), ("disabled", "#1f2937")],
+                  foreground=[("disabled", "#9ca3af")])
+        style.configure("TCheckbutton", background=self._colors["panel"], foreground=self._colors["text"])
+        style.map("TCheckbutton",
+                  background=[("active", self._colors["panel"])],
+                  foreground=[("active", self._colors["text"])])
+        style.configure("TEntry", fieldbackground=self._colors["input"], foreground=self._colors["text"])
+        style.configure("TCombobox", fieldbackground=self._colors["input"], foreground=self._colors["text"])
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", self._colors["input"])],
+            foreground=[("readonly", self._colors["text"])],
+            selectbackground=[("readonly", self._colors["input"])],
+            selectforeground=[("readonly", self._colors["text"])]
+        )
+        style.configure("TProgressbar", troughcolor=self._colors["panel2"], background=self._colors["accent"])
+
     def _build_widgets(self):
         # Scrollable container for all controls
-        container = tk.Frame(self)
+        container = tk.Frame(self, bg=self._colors["bg"])
         container.pack(fill="both", expand=True)
-        canvas = tk.Canvas(container, borderwidth=0)
+        canvas = tk.Canvas(container, borderwidth=0, bg=self._colors["bg"], highlightthickness=0)
         vscroll = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vscroll.set)
         vscroll.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
-        self.inner = tk.Frame(canvas)
+        self.inner = tk.Frame(canvas, bg=self._colors["bg"])
         self.inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=self.inner, anchor="nw")
 
         row = 0
 
-        def add_label_entry(name, default, row, col):
-            tk.Label(self.inner, text=name).grid(column=col, row=row, sticky="w", padx=5, pady=5)
+        header = ttk.Frame(self.inner, style="TFrame")
+        header.grid(column=0, row=row, columnspan=4, sticky="ew", padx=18, pady=(16, 6))
+        ttk.Label(header, text="glycanPRMQuant Pipeline", style="Title.TLabel").grid(column=0, row=0, sticky="w")
+        ttk.Label(header, text="Parallel processing for PRM glycan quantification", style="Muted.TLabel") \
+            .grid(column=0, row=1, sticky="w")
+        row += 1
+
+        def section(title):
+            nonlocal row
+            frame = ttk.Frame(self.inner, style="Card.TFrame")
+            frame.grid(column=0, row=row, columnspan=4, sticky="ew", padx=18, pady=8)
+            ttk.Label(frame, text=title, style="Section.TLabel") \
+                .grid(column=0, row=0, columnspan=4, sticky="w", padx=12, pady=(10, 6))
+            row += 1
+            return frame
+
+        def add_label_entry(name, default, row, col, parent):
+            ttk.Label(parent, text=name).grid(column=col, row=row, sticky="w", padx=8, pady=6)
             var = tk.StringVar(value=str(default))
-            tk.Entry(self.inner, textvariable=var, width=12).grid(column=col + 1, row=row, padx=5, pady=5, sticky="w")
+            ttk.Entry(parent, textvariable=var, width=14).grid(column=col + 1, row=row, padx=8, pady=6, sticky="w")
             return var
 
         # Input / Output
-        tk.Label(self.inner, text="Input .mzML files:").grid(column=0, row=row, sticky="w", padx=5, pady=5)
+        io_frame = section("Input & Output")
+        tk.Label(io_frame, text="Input .mzML files:", bg=self._colors["panel"], fg=self._colors["text"]) \
+            .grid(column=0, row=1, sticky="w", padx=8, pady=6)
         self.files_label = tk.StringVar(value="No files selected")
-        tk.Label(self.inner, textvariable=self.files_label, wraplength=320, justify="left").grid(column=1, row=row, columnspan=2, padx=5, pady=5, sticky="w")
-        tk.Button(self.inner, text="Browse", command=self._choose_files).grid(column=3, row=row, padx=5)
-        row += 1
+        tk.Label(io_frame, textvariable=self.files_label, bg=self._colors["panel"], fg=self._colors["muted"],
+                 wraplength=420, justify="left").grid(column=1, row=1, columnspan=2, padx=8, pady=6, sticky="w")
+        ttk.Button(io_frame, text="Browse", command=self._choose_files).grid(column=3, row=1, padx=8, pady=6)
 
-        tk.Label(self.inner, text="Output folder:").grid(column=0, row=row, sticky="w", padx=5, pady=5)
+        tk.Label(io_frame, text="Output folder:", bg=self._colors["panel"], fg=self._colors["text"]) \
+            .grid(column=0, row=2, sticky="w", padx=8, pady=6)
         self.out_dir = tk.StringVar()
-        tk.Entry(self.inner, textvariable=self.out_dir, width=30).grid(column=1, row=row, columnspan=2, padx=5, pady=5, sticky="w")
-        tk.Button(self.inner, text="Browse", command=self._choose_output).grid(column=3, row=row, padx=5)
+        ttk.Entry(io_frame, textvariable=self.out_dir, width=40).grid(column=1, row=2, columnspan=2, padx=8, pady=6, sticky="w")
+        ttk.Button(io_frame, text="Browse", command=self._choose_output).grid(column=3, row=2, padx=8, pady=6)
         row += 1
 
         # Numeric parameters arranged in 3 columns
+        params_frame = section("Processing Parameters")
         params = [
             ("Workers", 2),
             ("MS1 ppm tol", 10),
@@ -71,13 +146,13 @@ class PipelineGUI(tk.Tk):
             ("AUC rel. height", 0.7),
         ]
         self._param_vars = {}
-        base_row = row
+        base_row = 1
         for i, (label, default) in enumerate(params):
             r = base_row + i // 3
             c = (i % 3) * 2
-            var = add_label_entry(label, default, r, c)
+            var = add_label_entry(label, default, r, c, params_frame)
             self._param_vars[label] = var
-        row = base_row + (len(params) + 2) // 3 + 1
+        row += 1
 
         # Bind param vars to existing attributes
         self.n_workers = self._param_vars["Workers"]
@@ -93,18 +168,30 @@ class PipelineGUI(tk.Tk):
         self.rel_height = self._param_vars["AUC rel. height"]
 
         # Smoothing method selector
-        tk.Label(self.inner, text="Smoothing method").grid(column=0, row=row, sticky="w", padx=5, pady=5)
+        ttk.Label(params_frame, text="Smoothing method").grid(column=0, row=base_row + 4, sticky="w", padx=8, pady=6)
         self.smoothing_method = tk.StringVar(value="gaussian")
         ttk.Combobox(
-            self.inner,
+            params_frame,
             textvariable=self.smoothing_method,
             values=["gaussian", "savgol"],
             state="readonly",
             width=12
-        ).grid(column=1, row=row, padx=5, pady=5, sticky="w")
+        ).grid(column=1, row=base_row + 4, padx=8, pady=6, sticky="w")
+
+        # AUC rel-height mode selector
+        ttk.Label(params_frame, text="AUC rel height mode").grid(column=2, row=base_row + 4, sticky="w", padx=8, pady=6)
+        self.rel_height_mode = tk.StringVar(value="prominence")
+        ttk.Combobox(
+            params_frame,
+            textvariable=self.rel_height_mode,
+            values=["prominence", "height"],
+            state="readonly",
+            width=12
+        ).grid(column=3, row=base_row + 4, padx=8, pady=6, sticky="w")
         row += 1
 
         # Toggles
+        toggles_frame = section("Outputs & Options")
         self.overwrite_var = tk.BooleanVar(value=False)
         self.dryrun_var = tk.BooleanVar(value=False)
         self.adduct_plot_var = tk.BooleanVar(value=True)
@@ -112,81 +199,100 @@ class PipelineGUI(tk.Tk):
         self.skyline_var = tk.BooleanVar(value=False)
         self.smoothing_var = tk.BooleanVar(value=True)
 
-        tk.Checkbutton(self.inner, text="Overwrite existing outputs", variable=self.overwrite_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
-        tk.Checkbutton(self.inner, text="Dry run (plan only, no processing)", variable=self.dryrun_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
-        tk.Checkbutton(self.inner, text="Generate precursor-adduct chromatograms", variable=self.adduct_plot_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
-        tk.Checkbutton(self.inner, text="Generate total chromatograms", variable=self.total_plot_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
-        tk.Checkbutton(self.inner, text="Skyline Transition list", variable=self.skyline_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
-        tk.Checkbutton(self.inner, text="Enable smoothing", variable=self.smoothing_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
-
-        # Run and Stop buttons
-        self.run_btn = tk.Button(self.inner, text="Run Pipeline", command=self._on_run,
-                                 bg="#4CAF50", fg="white", font=("Arial", 12, "bold"))
-        self.run_btn.grid(column=0, row=row, columnspan=4, pady=10, sticky="ew")
+        ttk.Checkbutton(toggles_frame, text="Overwrite existing outputs", variable=self.overwrite_var) \
+            .grid(column=0, row=1, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(toggles_frame, text="Dry run (plan only, no processing)", variable=self.dryrun_var) \
+            .grid(column=0, row=2, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(toggles_frame, text="Generate precursor-adduct chromatograms", variable=self.adduct_plot_var) \
+            .grid(column=0, row=3, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(toggles_frame, text="Generate total chromatograms", variable=self.total_plot_var) \
+            .grid(column=0, row=4, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(toggles_frame, text="Skyline Transition list", variable=self.skyline_var) \
+            .grid(column=0, row=5, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(toggles_frame, text="Enable smoothing", variable=self.smoothing_var) \
+            .grid(column=0, row=6, columnspan=4, sticky="w", padx=8, pady=4)
         row += 1
 
-        self.stop_btn = tk.Button(self.inner, text="Stop Run", command=self._on_stop,
-                                  bg="#F44336", fg="white", font=("Arial", 12, "bold"),
-                                  state="disabled")
-        self.stop_btn.grid(column=0, row=row, columnspan=4, pady=10, sticky="ew")
+        # Run and Stop buttons
+        action_frame = section("Run")
+        self.run_btn = ttk.Button(action_frame, text="Run Pipeline", command=self._on_run, style="Primary.TButton")
+        self.run_btn.grid(column=0, row=1, columnspan=4, pady=8, padx=8, sticky="ew")
+        self.stop_btn = ttk.Button(action_frame, text="Stop Run", command=self._on_stop,
+                                   style="Danger.TButton", state="disabled")
+        self.stop_btn.grid(column=0, row=2, columnspan=4, pady=(0, 8), padx=8, sticky="ew")
         row += 1
 
         # Live log
-        tk.Label(self.inner, text="Pipeline log:").grid(column=0, row=row, sticky="nw", padx=5)
-        self.log_box = scrolledtext.ScrolledText(self.inner, height=12, width=80, state="disabled")
-        self.log_box.grid(column=0, row=row + 1, columnspan=4, padx=5, pady=5, sticky="nsew")
-        row += 2
+        log_frame = section("Pipeline Log")
+        ttk.Label(log_frame, text="Live output", style="Muted.TLabel").grid(column=0, row=1, sticky="w", padx=8)
+        self.log_box = scrolledtext.ScrolledText(
+            log_frame,
+            height=12,
+            width=96,
+            state="disabled",
+            bg=self._colors["panel2"],
+            fg=self._colors["text"],
+            insertbackground=self._colors["text"]
+        )
+        self.log_box.grid(column=0, row=2, columnspan=4, padx=8, pady=6, sticky="nsew")
+        row += 1
 
         # Progress bar
-        tk.Label(self.inner, text="Progress:").grid(column=0, row=row, sticky="w", padx=5)
-        self.progress = ttk.Progressbar(self.inner, orient="horizontal", mode="determinate", length=450)
-        self.progress.grid(column=1, row=row, columnspan=3, sticky="ew", padx=5, pady=5)
+        progress_frame = section("Progress")
+        ttk.Label(progress_frame, text="Status", style="Muted.TLabel").grid(column=0, row=1, sticky="w", padx=8)
+        self.progress = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate", length=560)
+        self.progress.grid(column=1, row=1, columnspan=3, sticky="ew", padx=8, pady=6)
         row += 1
 
         # Status summary and open-output
         self.status_var = tk.StringVar(value="Idle")
-        tk.Label(self.inner, textvariable=self.status_var, anchor="w").grid(column=0, row=row, columnspan=3, sticky="w", padx=5, pady=5)
-        tk.Button(self.inner, text="Open output folder", command=self._open_output).grid(column=3, row=row, padx=5, pady=5, sticky="e")
+        status_frame = section("Output")
+        ttk.Label(status_frame, textvariable=self.status_var, anchor="w") \
+            .grid(column=0, row=1, columnspan=3, sticky="w", padx=8, pady=6)
+        ttk.Button(status_frame, text="Open output folder", command=self._open_output) \
+            .grid(column=3, row=1, padx=8, pady=6, sticky="e")
 
     def _choose_files(self):
-        files = filedialog.askopenfilenames(filetypes=[("mzML files","*.mzML *.mzml")])
+        files = filedialog.askopenfilenames(filetypes=[("mzML files", "*.mzML *.mzml")])
         if files:
             self.selected_files = list(files)
-            display = "\n".join(os.path.basename(f) for f in self.selected_files)
-            self.files_label.set(display)
+            count = len(self.selected_files)
+            self.files_label.set(f"{count} file{'s' if count != 1 else ''} selected")
         else:
             self.selected_files = []
             self.files_label.set("No files selected")
 
     def _choose_output(self):
         d = filedialog.askdirectory()
-        if d: self.out_dir.set(d)
+        if d:
+            self.out_dir.set(d)
 
     def _on_run(self):
         # gather parameters
         try:
             params = {
-                "input_files":         self.selected_files,
-                "input_dir":           None,
-                "output_root":         self.out_dir.get(),
-                "n_workers":           int(self.n_workers.get()),
-                "ppm_ms1_tol":         float(self.ppm_ms1_tol.get()),
-                "mz_min":              float(self.mz_min.get()),
-                "mz_max":              float(self.mz_max.get()),
+                "input_files": self.selected_files,
+                "input_dir": None,
+                "output_root": self.out_dir.get(),
+                "n_workers": int(self.n_workers.get()),
+                "ppm_ms1_tol": float(self.ppm_ms1_tol.get()),
+                "mz_min": float(self.mz_min.get()),
+                "mz_max": float(self.mz_max.get()),
                 "intensity_threshold": float(self.intensity_threshold.get()),
-                "ppm_ms2_tol":         float(self.ppm_ms2_tol.get()),
-                "mz_tol":              float(self.mz_tol.get()),
-                "smoothing_window":    int(self.smoothing_window.get()),
-                "smoothing_method":    self.smoothing_method.get(),
-                "mass_offset":         float(self.mass_offset.get()),
-                "mz_offset":           float(self.mz_offset.get()),
-                "rel_height":          float(self.rel_height.get()),
-                "overwrite":           bool(self.overwrite_var.get()),
-                "dry_run":             bool(self.dryrun_var.get()),
+                "ppm_ms2_tol": float(self.ppm_ms2_tol.get()),
+                "mz_tol": float(self.mz_tol.get()),
+                "smoothing_window": int(self.smoothing_window.get()),
+                "smoothing_method": self.smoothing_method.get(),
+                "mass_offset": float(self.mass_offset.get()),
+                "mz_offset": float(self.mz_offset.get()),
+                "rel_height": float(self.rel_height.get()),
+                "rel_height_mode": self.rel_height_mode.get(),
+                "overwrite": bool(self.overwrite_var.get()),
+                "dry_run": bool(self.dryrun_var.get()),
                 "enable_adduct_plots": bool(self.adduct_plot_var.get()),
-                "enable_total_plots":  bool(self.total_plot_var.get()),
-                "skyline_transition":  bool(self.skyline_var.get()),
-                "enable_smoothing":    bool(self.smoothing_var.get()),
+                "enable_total_plots": bool(self.total_plot_var.get()),
+                "skyline_transition": bool(self.skyline_var.get()),
+                "enable_smoothing": bool(self.smoothing_var.get()),
             }
         except ValueError as e:
             messagebox.showerror("Parameter error", f"Invalid number: {e}")
@@ -207,7 +313,7 @@ class PipelineGUI(tk.Tk):
             params["n_workers"] = os.cpu_count() or 1
         if params["n_workers"] > 61:
             params["n_workers"] = 61
-        self.status_var.set(f"Running… files={len(params['input_files'])}, workers={params['n_workers']}")
+        self.status_var.set(f"Running... files={len(params['input_files'])}, workers={params['n_workers']}")
 
         self._save_prefs()
 
@@ -261,96 +367,67 @@ class PipelineGUI(tk.Tk):
                 self._append_log(msg)
         except Exception:
             pass
-        if self.pipeline_proc and self.pipeline_proc.is_alive():
+
+        if self.progress_queue:
+            try:
+                while True:
+                    item = self.progress_queue.get_nowait()
+                    if item is None:
+                        break
+                    self._update_progress(item)
+            except Exception:
+                pass
+
+        if self._polling:
             self.after(200, self._poll_log)
 
-    def _poll_progress(self):
-        if not self.progress_queue:
-            return
-        try:
-            while True:
-                item = self.progress_queue.get_nowait()
-                if item is None:
-                    return
-                base, status, msg = item
-                self._update_counters(status)
-        except Exception:
-            pass
-        if self._polling:
-            self.after(300, self._poll_progress)
-
-    def _append_log(self, text):
-        self.log_box.config(state="normal")
-        self.log_box.insert(tk.END, text)
-        self.log_box.see(tk.END)
-        self.log_box.config(state="disabled")
+    def _append_log(self, msg):
+        self.log_box.configure(state="normal")
+        self.log_box.insert("end", msg)
+        self.log_box.see("end")
+        self.log_box.configure(state="disabled")
 
     def _clear_log(self):
-        self.log_box.config(state="normal")
-        self.log_box.delete("1.0", tk.END)
-        self.log_box.config(state="disabled")
+        self.log_box.configure(state="normal")
+        self.log_box.delete("1.0", "end")
+        self.log_box.configure(state="disabled")
 
-    def _init_counters(self, total):
-        self._counts = {"total": total, "done": 0, "skipped": 0, "error": 0, "dry-run": 0}
-        self.progress["maximum"] = max(total, 1)
+    def _init_counters(self, total: int):
+        self._progress_total = max(int(total), 1)
+        self._progress_done = 0
+        self._progress_skipped = 0
+        self._progress_error = 0
         self.progress["value"] = 0
-        self._update_status_text()
-        self._poll_progress()
 
-    def _update_counters(self, status):
-        if status in self._counts:
-            self._counts[status] += 1
-        # completed = done+skipped+error+dry-run
-        completed = self._counts["done"] + self._counts["skipped"] + self._counts["error"] + self._counts["dry-run"]
-        self.progress["value"] = completed
-        self._update_status_text()
-
-    def _update_status_text(self):
-        c = getattr(self, "_counts", {"total":0,"done":0,"skipped":0,"error":0,"dry-run":0})
+    def _update_progress(self, item):
+        base, status, msg = item
+        if status == "done":
+            self._progress_done += 1
+        elif status == "skipped":
+            self._progress_skipped += 1
+        elif status == "error":
+            self._progress_error += 1
+        self.progress["value"] = 100.0 * (
+            self._progress_done + self._progress_skipped + self._progress_error
+        ) / self._progress_total
         self.status_var.set(
-            f"Total {c['total']} | done {c['done']} | skipped {c['skipped']} | dry-run {c['dry-run']} | errors {c['error']}"
+            f"Done={self._progress_done}, Skipped={self._progress_skipped}, "
+            f"Errors={self._progress_error}, Total={self._progress_total}"
         )
 
     def _open_output(self):
         out_dir = self.out_dir.get()
-        if out_dir and os.path.isdir(out_dir):
-            try:
-                os.startfile(out_dir)
-            except Exception as e:
-                messagebox.showerror("Open output", f"Cannot open folder: {e}")
-        else:
-            messagebox.showwarning("Open output", "No output folder set")
-
-    def _load_prefs(self):
+        if not out_dir or not os.path.isdir(out_dir):
+            messagebox.showerror("Output error", "Output directory does not exist")
+            return
         try:
-            if os.path.isfile(self._prefs_path):
-                with open(self._prefs_path, "r") as fh:
-                    prefs = json.load(fh)
-                self.out_dir.set(prefs.get("out_dir",""))
-                self.n_workers.set(str(prefs.get("n_workers",2)))
-                self.ppm_ms1_tol.set(str(prefs.get("ppm_ms1_tol",10)))
-                self.mz_min.set(str(prefs.get("mz_min",400)))
-                self.mz_max.set(str(prefs.get("mz_max",2000)))
-                self.intensity_threshold.set(str(prefs.get("intensity_threshold",1e2)))
-                self.ppm_ms2_tol.set(str(prefs.get("ppm_ms2_tol",10)))
-                self.mz_tol.set(str(prefs.get("mz_tol",0.02)))
-                self.smoothing_window.set(str(prefs.get("smoothing_window",5)))
-                self.smoothing_method.set(str(prefs.get("smoothing_method","gaussian")))
-                self.mass_offset.set(str(prefs.get("mass_offset",0.0)))
-                self.mz_offset.set(str(prefs.get("mz_offset",0.0)))
-                self.rel_height.set(str(prefs.get("rel_height",0.7)))
-                self.overwrite_var.set(prefs.get("overwrite", False))
-                self.dryrun_var.set(prefs.get("dry_run", False))
-                self.adduct_plot_var.set(prefs.get("enable_adduct_plots", True))
-                self.total_plot_var.set(prefs.get("enable_total_plots", True))
-                self.skyline_var.set(prefs.get("skyline_transition", False))
-                self.smoothing_var.set(prefs.get("enable_smoothing", True))
+            os.startfile(out_dir)
         except Exception:
-            pass
+            messagebox.showerror("Open error", "Failed to open output folder.")
 
     def _save_prefs(self):
         prefs = {
-            "out_dir": self.out_dir.get(),
+            "output_root": self.out_dir.get(),
             "n_workers": self.n_workers.get(),
             "ppm_ms1_tol": self.ppm_ms1_tol.get(),
             "mz_min": self.mz_min.get(),
@@ -363,6 +440,7 @@ class PipelineGUI(tk.Tk):
             "mass_offset": self.mass_offset.get(),
             "mz_offset": self.mz_offset.get(),
             "rel_height": self.rel_height.get(),
+            "rel_height_mode": self.rel_height_mode.get(),
             "overwrite": self.overwrite_var.get(),
             "dry_run": self.dryrun_var.get(),
             "enable_adduct_plots": self.adduct_plot_var.get(),
@@ -371,12 +449,52 @@ class PipelineGUI(tk.Tk):
             "enable_smoothing": self.smoothing_var.get(),
         }
         try:
-            with open(self._prefs_path, "w") as fh:
-                json.dump(prefs, fh)
+            with open(self._prefs_path, "w", encoding="utf-8") as f:
+                json.dump(prefs, f, indent=2)
         except Exception:
             pass
 
+    def _load_prefs(self):
+        if not os.path.isfile(self._prefs_path):
+            return
+        try:
+            with open(self._prefs_path, "r", encoding="utf-8") as f:
+                prefs = json.load(f)
+        except Exception:
+            return
+        if "output_root" in prefs:
+            self.out_dir.set(prefs["output_root"])
+        for key, var in [
+            ("n_workers", self.n_workers),
+            ("ppm_ms1_tol", self.ppm_ms1_tol),
+            ("mz_min", self.mz_min),
+            ("mz_max", self.mz_max),
+            ("intensity_threshold", self.intensity_threshold),
+            ("ppm_ms2_tol", self.ppm_ms2_tol),
+            ("mz_tol", self.mz_tol),
+            ("smoothing_window", self.smoothing_window),
+            ("smoothing_method", self.smoothing_method),
+            ("mass_offset", self.mass_offset),
+            ("mz_offset", self.mz_offset),
+            ("rel_height", self.rel_height),
+            ("rel_height_mode", self.rel_height_mode),
+        ]:
+            if key in prefs:
+                var.set(prefs[key])
+        if "overwrite" in prefs:
+            self.overwrite_var.set(prefs["overwrite"])
+        if "dry_run" in prefs:
+            self.dryrun_var.set(prefs["dry_run"])
+        if "enable_adduct_plots" in prefs:
+            self.adduct_plot_var.set(prefs["enable_adduct_plots"])
+        if "enable_total_plots" in prefs:
+            self.total_plot_var.set(prefs["enable_total_plots"])
+        if "skyline_transition" in prefs:
+            self.skyline_var.set(prefs["skyline_transition"])
+        if "enable_smoothing" in prefs:
+            self.smoothing_var.set(prefs["enable_smoothing"])
+
+
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
     app = PipelineGUI()
     app.mainloop()

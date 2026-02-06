@@ -127,6 +127,7 @@ def process_mzml_pipeline(
     enable_adduct_plots: bool = True,
     enable_total_plots: bool = True,
     rel_height: float = 0.7,
+    rel_height_mode: str = "prominence",
     skyline_transition: bool = False,
     enable_smoothing: bool = True
 ):
@@ -267,7 +268,8 @@ def process_mzml_pipeline(
             smoothing_window=effective_window,
             smoothing_method=smoothing_method,
             adduct_col='PrecursorAdduct',
-            rel_height=rel_height
+            rel_height=rel_height,
+            rel_height_mode=rel_height_mode
         )
 
         # Total AUC (backward compatible filename)
@@ -287,7 +289,8 @@ def process_mzml_pipeline(
             total_input,
             smoothing_window=effective_window,
             adduct_col='PrecursorAdduct',
-            rel_height=rel_height
+            rel_height=rel_height,
+            rel_height_mode=rel_height_mode
         )
         total_window_df = total_window_df.set_index('Glycan')
 
