@@ -1,11 +1,12 @@
 import os
 import pandas as pd
+import numpy as np
 
 from glycanPRMQuant.msfileReader import extractMS2
 from glycanPRMQuant.matchMS1     import matchMS1
 from glycanPRMQuant.matchMS2     import matchMS2
 from glycanPRMQuant.calculateAUC import calculateAUC
-from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments
+from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments, plot_total_chromatogram_with_window
 from glycanPRMQuant.plotMS2spectrum   import plotMS2spectrum
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
@@ -31,6 +32,22 @@ def _smooth_signal(y, method: str, window: int):
                 return y
         return savgol_filter(y, window_length=win, polyorder=2, mode='nearest')
     return y
+
+def _resample_uniform(rt, y):
+    rt = np.asarray(rt, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if rt.size < 3:
+        return rt, y
+    order = np.argsort(rt)
+    rt = rt[order]
+    y = y[order]
+    diffs = np.diff(rt)
+    step = np.median(diffs[diffs > 0]) if np.any(diffs > 0) else None
+    if step is None or step <= 0:
+        return rt, y
+    grid = np.arange(rt.min(), rt.max() + step * 0.5, step)
+    y_interp = np.interp(grid, rt, y)
+    return grid, y_interp
 
 def _normalize_glycan(val):
     if pd.isna(val):
@@ -61,7 +78,9 @@ def _compute_glycan_apex_rt(all_df: pd.DataFrame, smoothing_window: int, smoothi
         x = sub['rt'].to_numpy()
         y = sub['summed_intensity'].to_numpy()
         if smoothing_window and smoothing_window > 0:
-            y = _smooth_signal(y, smoothing_method, smoothing_window)
+            xg, yg = _resample_uniform(x, y)
+            y = _smooth_signal(yg, smoothing_method, smoothing_window)
+            x = xg
         if y.size == 0:
             continue
         apex[glycan] = float(x[int(y.argmax())])
@@ -108,7 +127,8 @@ def process_mzml_pipeline(
     enable_adduct_plots: bool = True,
     enable_total_plots: bool = True,
     rel_height: float = 0.7,
-    skyline_transition: bool = False
+    skyline_transition: bool = False,
+    enable_smoothing: bool = True
 ):
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
     os.makedirs(output_dir, exist_ok=True)
@@ -150,6 +170,7 @@ def process_mzml_pipeline(
 
     # 3) For each glycan: match MS2 (collect only)
     adduct_charge = {'2H':2,'3H':3,'4H':4,'H+NH4':2,'2NH4':2}
+    effective_window = smoothing_window if enable_smoothing else 0
 
     for glycan in sorted(glycans):
         print(f"Processing glycan {glycan!r}...")
@@ -188,7 +209,7 @@ def process_mzml_pipeline(
         # Chromatograms per fragment (legacy view)
         chrom_frag_svg = os.path.join(images_dir, f"ms2_{glycan}.svg")
         try:
-            plot_ms2_fragments(csv_path, window=smoothing_window,
+            plot_ms2_fragments(csv_path, window=effective_window,
                                top_n=fragment_top_n, save_path=chrom_frag_svg,
                                group_col='Fragment',
                                smoothing_method=smoothing_method)
@@ -200,7 +221,7 @@ def process_mzml_pipeline(
         if enable_adduct_plots:
             chrom_adduct_svg = os.path.join(images_dir, f"ms2_{glycan}_by_precursor_adduct.svg")
             try:
-                plot_ms2_fragments(csv_path, window=smoothing_window,
+                plot_ms2_fragments(csv_path, window=effective_window,
                                    top_n=None, save_path=chrom_adduct_svg,
                                    group_col='PrecursorAdduct',
                                    smoothing_method=smoothing_method)
@@ -212,7 +233,7 @@ def process_mzml_pipeline(
         if enable_total_plots:
             chrom_total_svg = os.path.join(images_dir, f"ms2_{glycan}_total.svg")
             try:
-                plot_ms2_fragments(csv_path, window=smoothing_window,
+                plot_ms2_fragments(csv_path, window=effective_window,
                                    top_n=None, save_path=chrom_total_svg,
                                    group_col=None,
                                    smoothing_method=smoothing_method)
@@ -228,12 +249,12 @@ def process_mzml_pipeline(
             print(f"  -> Saved spectrum to {spec_svg}")
         except Exception as e:
             print(f"  [warn] Spectrum plot failed: {e}")
-# 4) AUC
+    # 4) AUC
     if not all_df.empty:
         print("Calculating AUC...")
         per_adduct_df, total_df = calculateAUC(
             all_df,
-            smoothing_window=smoothing_window,
+            smoothing_window=effective_window,
             smoothing_method=smoothing_method,
             adduct_col='PrecursorAdduct',
             rel_height=rel_height
@@ -249,7 +270,39 @@ def process_mzml_pipeline(
         per_adduct_df.to_csv(auc_adduct_path, index=False)
         print(f" -> Wrote per-adduct AUC values to {auc_adduct_path}")
 
-# 5) Skyline transition export (unique fragments, apex RT per glycan)
+        # Compute total-window boundaries for shaded AUC plots
+        total_input = all_df.copy()
+        total_input['PrecursorAdduct'] = 'ALL'
+        total_window_df, _ = calculateAUC(
+            total_input,
+            smoothing_window=effective_window,
+            adduct_col='PrecursorAdduct',
+            rel_height=rel_height
+        )
+        total_window_df = total_window_df.set_index('Glycan')
+
+    # 5) Total chromatogram with AUC window shading
+    if not all_df.empty:
+        for glycan, sub in all_df.groupby('Glycan'):
+            if glycan not in total_window_df.index:
+                continue
+            start_rt = float(total_window_df.loc[glycan, 'start_rt'])
+            end_rt = float(total_window_df.loc[glycan, 'end_rt'])
+            csv_path = os.path.join(output_dir, f"ms2_{glycan}.csv")
+            shaded_svg = os.path.join(images_dir, f"ms2_{glycan}_total_auc.svg")
+            try:
+                plot_total_chromatogram_with_window(
+                    csv_path,
+                    window=effective_window,
+                    save_path=shaded_svg,
+                    start_rt=start_rt,
+                    end_rt=end_rt
+                )
+                print(f"  -> Saved total chromatogram with AUC window to {shaded_svg}")
+            except Exception as e:
+                print(f"  [warn] Total AUC chromatogram failed: {e}")
+
+    # 6) Skyline transition export (unique fragments, apex RT per glycan)
     if skyline_transition and not all_df.empty:
         apex_rt = _compute_glycan_apex_rt(all_df, smoothing_window, smoothing_method)
         charge = all_df['PrecursorAdduct'].map(adduct_charge).fillna(0).astype(int)

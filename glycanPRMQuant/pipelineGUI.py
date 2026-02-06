@@ -110,12 +110,14 @@ class PipelineGUI(tk.Tk):
         self.adduct_plot_var = tk.BooleanVar(value=True)
         self.total_plot_var = tk.BooleanVar(value=True)
         self.skyline_var = tk.BooleanVar(value=False)
+        self.smoothing_var = tk.BooleanVar(value=True)
 
         tk.Checkbutton(self.inner, text="Overwrite existing outputs", variable=self.overwrite_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
         tk.Checkbutton(self.inner, text="Dry run (plan only, no processing)", variable=self.dryrun_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
         tk.Checkbutton(self.inner, text="Generate precursor-adduct chromatograms", variable=self.adduct_plot_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
         tk.Checkbutton(self.inner, text="Generate total chromatograms", variable=self.total_plot_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
         tk.Checkbutton(self.inner, text="Skyline Transition list", variable=self.skyline_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
+        tk.Checkbutton(self.inner, text="Enable smoothing", variable=self.smoothing_var).grid(column=0, row=row, columnspan=4, sticky="w", padx=5); row += 1
 
         # Run and Stop buttons
         self.run_btn = tk.Button(self.inner, text="Run Pipeline", command=self._on_run,
@@ -184,6 +186,7 @@ class PipelineGUI(tk.Tk):
                 "enable_adduct_plots": bool(self.adduct_plot_var.get()),
                 "enable_total_plots":  bool(self.total_plot_var.get()),
                 "skyline_transition":  bool(self.skyline_var.get()),
+                "enable_smoothing":    bool(self.smoothing_var.get()),
             }
         except ValueError as e:
             messagebox.showerror("Parameter error", f"Invalid number: {e}")
@@ -341,6 +344,7 @@ class PipelineGUI(tk.Tk):
                 self.adduct_plot_var.set(prefs.get("enable_adduct_plots", True))
                 self.total_plot_var.set(prefs.get("enable_total_plots", True))
                 self.skyline_var.set(prefs.get("skyline_transition", False))
+                self.smoothing_var.set(prefs.get("enable_smoothing", True))
         except Exception:
             pass
 
@@ -364,6 +368,7 @@ class PipelineGUI(tk.Tk):
             "enable_adduct_plots": self.adduct_plot_var.get(),
             "enable_total_plots": self.total_plot_var.get(),
             "skyline_transition": self.skyline_var.get(),
+            "enable_smoothing": self.smoothing_var.get(),
         }
         try:
             with open(self._prefs_path, "w") as fh:

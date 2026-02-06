@@ -23,7 +23,8 @@ def _process_one_file(
     enable_total_plots: bool = True,
     dry_run: bool = False,
     rel_height: float = 0.7,
-    skyline_transition: bool = False
+    skyline_transition: bool = False,
+    enable_smoothing: bool = True
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -59,7 +60,8 @@ def _process_one_file(
             enable_adduct_plots=enable_adduct_plots,
             enable_total_plots=enable_total_plots,
             rel_height=rel_height,
-            skyline_transition=skyline_transition
+            skyline_transition=skyline_transition,
+            enable_smoothing=enable_smoothing
         )
         return base, 'done', None
     except Exception as e:
@@ -86,6 +88,7 @@ def run_parallel_pipeline(
     dry_run: bool = False,
     rel_height: float = 0.7,
     skyline_transition: bool = False,
+    enable_smoothing: bool = True,
     log_queue=None,
     progress_queue=None
 ):
@@ -141,7 +144,8 @@ def run_parallel_pipeline(
                     enable_total_plots,
                     dry_run,
                     rel_height,
-                    skyline_transition
+                    skyline_transition,
+                    enable_smoothing
                 ): path for path in mzml_files
             }
             for fut in as_completed(futures):

@@ -28,6 +28,22 @@ def _smooth_signal(y, method: str, window: int):
         return savgol_filter(y, window_length=win, polyorder=2, mode='nearest')
     return y
 
+def _resample_uniform(rt, y):
+    rt = np.asarray(rt, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if rt.size < 3:
+        return rt, y
+    order = np.argsort(rt)
+    rt = rt[order]
+    y = y[order]
+    diffs = np.diff(rt)
+    step = np.median(diffs[diffs > 0]) if np.any(diffs > 0) else None
+    if step is None or step <= 0:
+        return rt, y
+    grid = np.arange(rt.min(), rt.max() + step * 0.5, step)
+    y_interp = np.interp(grid, rt, y)
+    return grid, y_interp
+
 def calculateAUC(
     ms2_input,
     glycan_col: str = 'Glycan',
@@ -119,7 +135,9 @@ def calculateAUC(
 
         # apply smoothing if requested
         if smoothing_window and smoothing_window > 0:
-            y_smooth = _smooth_signal(y, smoothing_method, smoothing_window)
+            xg, yg = _resample_uniform(x, y)
+            y_smooth = _smooth_signal(yg, smoothing_method, smoothing_window)
+            x = xg
         else:
             y_smooth = y
 
@@ -144,7 +162,7 @@ def calculateAUC(
 
         # integrate using np.trapezoid
         mask = (x >= start_rt) & (x <= end_rt)
-        auc = np.trapezoid(y_smooth[mask], dx=1)
+        auc = np.trapezoid(y_smooth[mask], x[mask])
 
         print(
             f"Glycan {glycan!r}: peak RT={peak_rt:.2f}, "
