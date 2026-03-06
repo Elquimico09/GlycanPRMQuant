@@ -93,12 +93,16 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=20,
     # Sort by m/z for consistent plotting order
     frag_charge_avg = frag_charge_avg.sort_values('mz').reset_index(drop=True)
     max_intensity = frag_charge_avg['avg_intensity'].max()
+    if max_intensity > 0:
+        frag_charge_avg['relative_intensity'] = frag_charge_avg['avg_intensity'] / max_intensity
+    else:
+        frag_charge_avg['relative_intensity'] = 0.0
 
     # Plot averaged spectrum
     fig, ax = plt.subplots(figsize=figsize)
     markerline, stemlines, baseline = ax.stem(
         frag_charge_avg['mz'],
-        frag_charge_avg['avg_intensity']
+        frag_charge_avg['relative_intensity']
     )
     baseline.set_visible(False)
 
@@ -106,7 +110,7 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=20,
     for frag, x, y, charge in zip(
         frag_charge_avg['Fragment'],
         frag_charge_avg['mz'],
-        frag_charge_avg['avg_intensity'],
+        frag_charge_avg['relative_intensity'],
         frag_charge_avg['Charge']
     ):
         ax.text(
@@ -117,17 +121,17 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=20,
         )
 
     ax.set_xlabel('m/z')
-    ax.set_ylabel('Average Intensity')
+    ax.set_ylabel('Relative Intensity')
     # Add max intensity text to top left of the plot
     ax.text(
         0.01, 0.95,
-        f"Max Intensity: {max_intensity:.0f}",
+        f"Base Peak Intensity: {max_intensity:.0f}",
         transform=ax.transAxes,
         ha='left', va='top',
         fontsize=12,
         fontdict={'weight': 'bold', 'color': 'black'}
     )
-    ax.set_ylim(0, frag_charge_avg['avg_intensity'].max() * 1.4)
+    ax.set_ylim(0, 1.4)
     ax.set_xlim(frag_charge_avg['mz'].min() - 100, frag_charge_avg['mz'].max() * 1.05)
     title = f"Averaged MS2 Spectrum"
     if top_n is not None:

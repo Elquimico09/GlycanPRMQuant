@@ -1,5 +1,5 @@
 {
-  "output_root": "C:/Users/Vishal/Documents/PRM GLYCOMICS STANDARD/AZ_2ug",
+  "output_root": "C:/Users/Vishal/Documents/PRM GLYCOMICS STANDARD/Results_03_06_26",
   "n_workers": "4",
   "ppm_ms1_tol": "10",
   "mz_min": "400",
@@ -11,7 +11,7 @@
   "smoothing_method": "gaussian",
   "mass_offset": "0",
   "mz_offset": "0.0",
-  "rel_height": "0.8",
+  "rel_height": "0.9",
   "rel_height_mode": "height",
   "overwrite": true,
   "dry_run": false,

@@ -275,7 +275,7 @@ def plot_total_chromatogram_with_window(
     ms2_csv_file,
     window=11,
     save_path=None,
-    figsize=(6, 5),
+    figsize=(2.5, 5),
     smoothing_method: str = "gaussian",
     start_rt: float = None,
     end_rt: float = None
@@ -350,4 +350,3 @@ def plot_total_chromatogram_with_window(
     else:
         plt.show()
         plt.close(fig)
-
