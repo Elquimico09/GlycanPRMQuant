@@ -113,7 +113,7 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=None,
             x, y * 1.05,
             f"{frag}\n{x:.4f}+{int(charge)}",
             ha='center', va='bottom',
-            rotation=0, fontsize=10
+            rotation=90, fontsize=10
         )
 
     ax.set_xlabel('m/z')

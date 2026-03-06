@@ -317,7 +317,7 @@ def process_mzml_pipeline(
 
     # 6) Skyline transition export (unique fragments, apex RT per glycan)
     if skyline_transition and not all_df.empty:
-        apex_rt = _compute_glycan_apex_rt(all_df, smoothing_window, smoothing_method)
+        apex_rt = _compute_glycan_apex_rt(all_df, effective_window, smoothing_method)
         charge = all_df['PrecursorAdduct'].map(adduct_charge).fillna(0).astype(int)
         trans_df = pd.DataFrame({
             'Glycan': all_df['Glycan'],
