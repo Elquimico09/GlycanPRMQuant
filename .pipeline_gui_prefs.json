@@ -1,5 +1,5 @@
 {
-  "output_root": "C:/Users/Vishal/Documents/PRM Pompe Glycomics/RESULTS",
+  "output_root": "C:/Users/Vishal/Documents/PRM GLYCOMICS STANDARD/AZ_2ug",
   "n_workers": "4",
   "ppm_ms1_tol": "10",
   "mz_min": "400",
@@ -7,9 +7,9 @@
   "intensity_threshold": "100.0",
   "ppm_ms2_tol": "10",
   "mz_tol": "0.02",
-  "smoothing_window": "2",
+  "smoothing_window": "4",
   "smoothing_method": "gaussian",
-  "mass_offset": "1",
+  "mass_offset": "0",
   "mz_offset": "0.0",
   "rel_height": "0.8",
   "rel_height_mode": "height",
@@ -17,6 +17,6 @@
   "dry_run": false,
   "enable_adduct_plots": true,
   "enable_total_plots": true,
-  "skyline_transition": true,
+  "skyline_transition": false,
   "enable_smoothing": true
 }

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import scienceplots
 
 def plotMS2spectrum(file_path, window_minutes=2, top_n=None,
-                    save_path=None, figsize=(10, 6)):
+                    save_path=None, figsize=(14, 6)):
     """
     Reads an MS2 results file (CSV or Excel), identifies the scan with the maximum total fragment intensity,
     averages fragment intensities within a time window around that scan, and plots a single averaged MS2 spectrum
@@ -113,7 +113,7 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=None,
             x, y * 1.05,
             f"{frag}\n{x:.4f}+{int(charge)}",
             ha='center', va='bottom',
-            rotation=90, fontsize=10
+            rotation=90, fontsize=8
         )
 
     ax.set_xlabel('m/z')
