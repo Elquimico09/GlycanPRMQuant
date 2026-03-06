@@ -5,8 +5,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import scienceplots
 
-def plotMS2spectrum(file_path, window_minutes=2, top_n=None,
-                    save_path=None, figsize=(14, 6)):
+def plotMS2spectrum(file_path, window_minutes=2, top_n=20,
+                    save_path=None, figsize=(15, 5)):
     """
     Reads an MS2 results file (CSV or Excel), identifies the scan with the maximum total fragment intensity,
     averages fragment intensities within a time window around that scan, and plots a single averaged MS2 spectrum
@@ -127,7 +127,7 @@ def plotMS2spectrum(file_path, window_minutes=2, top_n=None,
         fontsize=12,
         fontdict={'weight': 'bold', 'color': 'black'}
     )
-    ax.set_ylim(0, frag_charge_avg['avg_intensity'].max() * 1.2)
+    ax.set_ylim(0, frag_charge_avg['avg_intensity'].max() * 1.4)
     ax.set_xlim(frag_charge_avg['mz'].min() - 100, frag_charge_avg['mz'].max() * 1.05)
     title = f"Averaged MS2 Spectrum"
     if top_n is not None:
