@@ -222,6 +222,7 @@ def process_mzml_pipeline(
         try:
             plot_ms2_fragments(csv_path, window=effective_window,
                                top_n=fragment_top_n, save_path=chrom_frag_pdf,
+                               figsize=(6.2, 4),
                                group_col='Fragment',
                                smoothing_method=smoothing_method)
             print(f"  -> Saved fragment-level chromatogram to {chrom_frag_pdf}")
