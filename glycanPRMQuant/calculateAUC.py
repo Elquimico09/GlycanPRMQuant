@@ -6,6 +6,9 @@ from scipy.signal import find_peaks, peak_widths
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 def _smooth_signal(y, method: str, window: int):
     if not window or window <= 0:
         return y
@@ -227,7 +230,7 @@ def calculateAUC(
         plt.rcParams['font.family'] = 'Arial'
 
         if plot:
-            fig, ax = plt.subplots(figsize=(2,3.2))
+            fig, ax = plt.subplots(figsize=(4.8, 4))
             ax.plot(x, y_smooth, label=(
                 f'smoothed ({smoothing_method}, w={smoothing_window})'
                 if smoothing_window and smoothing_window > 0 else 'raw'
@@ -249,4 +252,3 @@ def calculateAUC(
     per_adduct_df = pd.DataFrame(results)
     total_df = per_adduct_df.groupby(glycan_col, as_index=False)['AUC'].sum()
     return per_adduct_df, total_df
-

@@ -7,8 +7,11 @@ from typing import Tuple, Optional
 
 from glycanPRMQuant.glycanClassification import classifyGlycan  # adjust as needed
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 def plot_barplot(consolidated_csv: str,
-                 figsize=(6, 4),
+                 figsize=(4.8, 4),
                  save_path: str | None = None) -> pd.Series:
     # 1) classify
     df = classifyGlycan(consolidated_csv)
@@ -106,7 +109,7 @@ def _clean_type_series(s: pd.Series) -> pd.Series:
 # --------------------------------------------------------------------------
 def plot_type_barplot(
     consolidated_csv: str | Path,
-    figsize: Tuple[int, int] = (6, 4),
+    figsize: Tuple[int, int] = (4.8, 4),
     save_path: Optional[str | Path] = None,
 ) -> pd.Series:
     """

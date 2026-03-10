@@ -176,7 +176,7 @@ class BarplotTab(ttk.Frame):
             if self.by_var.get() == "Class":
               plot_barplot(csv, save_path=save_path)
             else:
-              plot_type_barplot(csv, save_path=save_path, figsize=(4, 4))
+              plot_type_barplot(csv, save_path=save_path, figsize=(4.8, 4))
             msg = "Plot saved!" if save_path else "Plot displayed!"
             if save_path:
                 msg += f"\n{save_path}"

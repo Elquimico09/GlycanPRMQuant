@@ -5,6 +5,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import scienceplots
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 def plotMS2spectrum(file_path, window_minutes=2, top_n=20,
                     save_path=None, figsize=(15, 5)):
     """

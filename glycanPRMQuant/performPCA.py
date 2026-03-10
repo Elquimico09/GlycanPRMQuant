@@ -4,6 +4,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import scienceplots
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 def plot_pca_2d(consolidated_csv: str,
                 save_path: str = None):
     """
@@ -43,7 +46,7 @@ def plot_pca_2d(consolidated_csv: str,
     scores_df = pd.DataFrame(pcs, columns=['PC1', 'PC2'], index=df_t.index)
 
     # Plot
-    plt.figure(figsize=(5, 4))
+    plt.figure(figsize=(4.8, 4))
     plt.scatter(scores_df['PC1'], scores_df['PC2'])
     for sample, (x, y) in scores_df.iterrows():
         plt.text(x, y, sample, fontsize=8, ha='right', va='bottom')

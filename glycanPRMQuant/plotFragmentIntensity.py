@@ -8,6 +8,9 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 import scienceplots
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 def _resample_uniform(rt, y):
     rt = np.asarray(rt, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -58,7 +61,7 @@ def _smooth_signal(y, method: str, window: int):
     return y
 
 def plot_ms2_fragments(ms2_csv_file, window=11, top_n=None, save_path=None,
-                       figsize=(6, 5), group_col='Fragment', smoothing_method: str = "gaussian"):
+                       figsize=(4.8, 4), group_col='Fragment', smoothing_method: str = "gaussian"):
     """
     Reads an MS2 results CSV file, aggregates fragment data per scan grouped by `group_col`,
     applies smoothing on a uniform RT grid if window > 0, and plots summed intensity vs. RT
@@ -275,7 +278,7 @@ def plot_total_chromatogram_with_window(
     ms2_csv_file,
     window=11,
     save_path=None,
-    figsize=(2.5, 5),
+    figsize=(4.8, 4),
     smoothing_method: str = "gaussian",
     start_rt: float = None,
     end_rt: float = None

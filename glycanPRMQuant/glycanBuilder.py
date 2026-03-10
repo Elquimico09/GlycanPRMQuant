@@ -5,6 +5,9 @@ from matplotlib.path import Path
 import itertools
 import pandas as pd
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 def build_glycan(composition, glycan_type="N"):
     """
     Build a glycan structure following custom rules:

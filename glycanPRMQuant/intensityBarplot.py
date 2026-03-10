@@ -2,6 +2,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scienceplots
 
+plt.rcParams["pdf.fonttype"] = 42
+plt.rcParams["ps.fonttype"] = 42
+
 def plot_glycan_intensity_boxplot(consolidated_csv: str,
                                   save_path: str = None) -> None:
     """
@@ -29,7 +32,7 @@ def plot_glycan_intensity_boxplot(consolidated_csv: str,
     data = [long_df.loc[long_df['Sample'] == s, 'AUC'].values for s in samples]
     
     # Plot
-    plt.figure(figsize=(7, 4))
+    plt.figure(figsize=(4.8, 4))
     plt.boxplot(data, labels=samples, showfliers=False)
     plt.ylabel('Glycan Abundance', fontsize=14)
     plt.title('Distribution of Glycan Abundance per Sample')

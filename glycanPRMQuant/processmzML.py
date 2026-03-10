@@ -218,46 +218,46 @@ def process_mzml_pipeline(
         print(f"  -> Wrote {len(sub)} MS2 matches to {csv_path}")
 
         # Chromatograms per fragment (legacy view)
-        chrom_frag_svg = os.path.join(images_dir, f"ms2_{glycan}.svg")
+        chrom_frag_pdf = os.path.join(images_dir, f"ms2_{glycan}.pdf")
         try:
             plot_ms2_fragments(csv_path, window=effective_window,
-                               top_n=fragment_top_n, save_path=chrom_frag_svg,
+                               top_n=fragment_top_n, save_path=chrom_frag_pdf,
                                group_col='Fragment',
                                smoothing_method=smoothing_method)
-            print(f"  -> Saved fragment-level chromatogram to {chrom_frag_svg}")
+            print(f"  -> Saved fragment-level chromatogram to {chrom_frag_pdf}")
         except Exception as e:
             print(f"  [warn] Fragment chromatogram failed: {e}")
 
         # Chromatogram per precursor adduct
         if enable_adduct_plots:
-            chrom_adduct_svg = os.path.join(images_dir, f"ms2_{glycan}_by_precursor_adduct.svg")
+            chrom_adduct_pdf = os.path.join(images_dir, f"ms2_{glycan}_by_precursor_adduct.pdf")
             try:
                 plot_ms2_fragments(csv_path, window=effective_window,
-                                   top_n=None, save_path=chrom_adduct_svg,
+                                   top_n=None, save_path=chrom_adduct_pdf,
                                    group_col='PrecursorAdduct',
                                    smoothing_method=smoothing_method)
-                print(f"  -> Saved precursor-adduct chromatogram to {chrom_adduct_svg}")
+                print(f"  -> Saved precursor-adduct chromatogram to {chrom_adduct_pdf}")
             except Exception as e:
                 print(f"  [warn] Precursor-adduct chromatogram failed: {e}")
 
         # Total chromatogram (all fragments/adducts summed)
         if enable_total_plots:
-            chrom_total_svg = os.path.join(images_dir, f"ms2_{glycan}_total.svg")
+            chrom_total_pdf = os.path.join(images_dir, f"ms2_{glycan}_total.pdf")
             try:
                 plot_ms2_fragments(csv_path, window=effective_window,
-                                   top_n=None, save_path=chrom_total_svg,
+                                   top_n=None, save_path=chrom_total_pdf,
                                    group_col=None,
                                    smoothing_method=smoothing_method)
-                print(f"  -> Saved total chromatogram to {chrom_total_svg}")
+                print(f"  -> Saved total chromatogram to {chrom_total_pdf}")
             except Exception as e:
                 print(f"  [warn] Total chromatogram failed: {e}")
 
         # averaged spectrum
-        spec_svg = os.path.join(images_dir, f"ms2_{glycan}_ms2spectrum.svg")
+        spec_pdf = os.path.join(images_dir, f"ms2_{glycan}_ms2spectrum.pdf")
         try:
             plotMS2spectrum(csv_path, window_minutes=spectrum_window_minutes,
-                            top_n=fragment_top_n, save_path=spec_svg)
-            print(f"  -> Saved spectrum to {spec_svg}")
+                            top_n=fragment_top_n, save_path=spec_pdf)
+            print(f"  -> Saved spectrum to {spec_pdf}")
         except Exception as e:
             print(f"  [warn] Spectrum plot failed: {e}")
     # 4) AUC
@@ -302,16 +302,16 @@ def process_mzml_pipeline(
             start_rt = float(total_window_df.loc[glycan, 'start_rt'])
             end_rt = float(total_window_df.loc[glycan, 'end_rt'])
             csv_path = os.path.join(output_dir, f"ms2_{glycan}.csv")
-            shaded_svg = os.path.join(images_dir, f"ms2_{glycan}_total_auc.svg")
+            shaded_pdf = os.path.join(images_dir, f"ms2_{glycan}_total_auc.pdf")
             try:
                 plot_total_chromatogram_with_window(
                     csv_path,
                     window=effective_window,
-                    save_path=shaded_svg,
+                    save_path=shaded_pdf,
                     start_rt=start_rt,
                     end_rt=end_rt
                 )
-                print(f"  -> Saved total chromatogram with AUC window to {shaded_svg}")
+                print(f"  -> Saved total chromatogram with AUC window to {shaded_pdf}")
             except Exception as e:
                 print(f"  [warn] Total AUC chromatogram failed: {e}")
 
