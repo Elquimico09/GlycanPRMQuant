@@ -49,6 +49,101 @@ def _resample_uniform(rt, y):
     y_interp = np.interp(grid, rt, y)
     return grid, y_interp
 
+def _build_common_grid(rts):
+    rts = np.asarray(rts, dtype=float)
+    if rts.size < 3:
+        return rts
+    rts = np.sort(rts)
+    diffs = np.diff(rts)
+    step = np.median(diffs[diffs > 0]) if np.any(diffs > 0) else None
+    if step is None or step <= 0:
+        return rts
+    return np.arange(rts.min(), rts.max() + step * 0.5, step)
+
+def _build_total_trace_like_total_plot(
+    sub: pd.DataFrame,
+    smoothing_window: int,
+    smoothing_method: str
+):
+    """
+    Build the total trace using the same per-adduct interpolation + sum approach
+    as plot_ms2_fragments(..., group_col=None) and plot_total_chromatogram_with_window.
+    """
+    if 'PrecursorAdduct' in sub.columns:
+        agg = (
+            sub.groupby(['scan_number', 'rt', 'PrecursorAdduct'])
+               .agg(sum_intensity=('fragment_intensity', 'sum'))
+               .reset_index()
+        )
+        all_rts = agg['rt'].values
+        x = _build_common_grid(all_rts)
+        y = np.zeros_like(x, dtype=float)
+        for g in agg['PrecursorAdduct'].unique().tolist():
+            ad = agg[agg['PrecursorAdduct'] == g].sort_values('rt')
+            xi = ad['rt'].values
+            yi = ad['sum_intensity'].values
+            if xi.size == 0:
+                continue
+            yi = np.interp(x, xi, yi, left=0.0, right=0.0)
+            if smoothing_window and smoothing_window > 0:
+                yi = _smooth_signal(yi, smoothing_method, smoothing_window)
+            y += yi
+        return x, y
+
+    total = (
+        sub.groupby(['scan_number', 'rt'])['fragment_intensity']
+           .sum()
+           .reset_index()
+           .sort_values('rt')
+    )
+    x = total['rt'].values
+    y = total['fragment_intensity'].values
+    if smoothing_window and smoothing_window > 0:
+        xg, yg = _resample_uniform(x, y)
+        y = _smooth_signal(yg, smoothing_method, smoothing_window)
+        x = xg
+    return x, y
+
+def _compute_total_window_boundaries(
+    all_df: pd.DataFrame,
+    smoothing_window: int,
+    smoothing_method: str,
+    rel_height: float,
+    rel_height_mode: str
+) -> pd.DataFrame:
+    """
+    Compute AUC boundaries from the same total trace model used for the displayed
+    total chromatogram (per-adduct interpolation + sum), then reuse calculateAUC
+    boundary logic on that constructed trace.
+    """
+    rows = []
+    if all_df.empty:
+        return pd.DataFrame(columns=['Glycan', 'peak_rt', 'start_rt', 'end_rt', 'AUC'])
+
+    for glycan, sub in all_df.groupby('Glycan'):
+        x, y = _build_total_trace_like_total_plot(sub, smoothing_window, smoothing_method)
+        if x.size == 0:
+            continue
+        trace_df = pd.DataFrame({
+            'Glycan': [glycan] * x.size,
+            'PrecursorAdduct': ['ALL'] * x.size,
+            'scan_number': np.arange(x.size, dtype=int),
+            'rt': x,
+            'fragment_intensity': y,
+        })
+        per_adduct_df, _ = calculateAUC(
+            trace_df,
+            adduct_col='PrecursorAdduct',
+            smoothing_window=0,
+            rel_height=rel_height,
+            rel_height_mode=rel_height_mode
+        )
+        if per_adduct_df.empty:
+            continue
+        rows.append(per_adduct_df.iloc[0].to_dict())
+
+    return pd.DataFrame(rows)
+
 def _normalize_glycan(val):
     if pd.isna(val):
         return ""
@@ -284,16 +379,17 @@ def process_mzml_pipeline(
         print(f" -> Wrote per-adduct AUC values to {auc_adduct_path}")
 
         # Compute total-window boundaries for shaded AUC plots
-        total_input = all_df.copy()
-        total_input['PrecursorAdduct'] = 'ALL'
-        total_window_df, _ = calculateAUC(
-            total_input,
+        total_window_df = _compute_total_window_boundaries(
+            all_df,
             smoothing_window=effective_window,
-            adduct_col='PrecursorAdduct',
+            smoothing_method=smoothing_method,
             rel_height=rel_height,
             rel_height_mode=rel_height_mode
         )
-        total_window_df = total_window_df.set_index('Glycan')
+        if not total_window_df.empty:
+            total_window_df = total_window_df.set_index('Glycan')
+        else:
+            total_window_df = pd.DataFrame(columns=['peak_rt', 'start_rt', 'end_rt', 'AUC'])
 
     # 5) Total chromatogram with AUC window shading
     if not all_df.empty:
