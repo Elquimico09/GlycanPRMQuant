@@ -285,7 +285,8 @@ def plot_total_chromatogram_with_window(
 ):
     """
     Plot total intensity chromatogram and optionally shade the integration window.
-    Uses the same per-adduct aggregation as the total plot when PrecursorAdduct exists.
+    Uses the same total-trace construction as calculateAUC(total_input) so that
+    shaded boundaries (start_rt/end_rt) align with the displayed trace.
     """
     df = pd.read_csv(ms2_csv_file)
     plt.style.use(['science', 'no-latex'])
@@ -296,38 +297,20 @@ def plot_total_chromatogram_with_window(
     if missing:
         raise ValueError(f"Missing required columns in CSV: {missing}")
 
-    if 'PrecursorAdduct' in df.columns:
-        agg = (
-            df.groupby(['scan_number', 'rt', 'PrecursorAdduct'])
-              .agg(sum_intensity=('fragment_intensity', 'sum'))
-              .reset_index()
-        )
-        all_rts = agg['rt'].values
-        x = _build_common_grid(all_rts)
-        y = np.zeros_like(x, dtype=float)
-        for g in agg['PrecursorAdduct'].unique().tolist():
-            sub = agg[agg['PrecursorAdduct'] == g].sort_values('rt')
-            xi = sub['rt'].values
-            yi = sub['sum_intensity'].values
-            if xi.size == 0:
-                continue
-            yi = np.interp(x, xi, yi, left=0.0, right=0.0)
-            if window and window > 0:
-                yi = _smooth_signal(yi, smoothing_method, window)
-            y += yi
-    else:
-        total = (
-            df.groupby(['scan_number', 'rt'])['fragment_intensity']
-              .sum()
-              .reset_index()
-              .sort_values('rt')
-        )
-        x = total['rt'].values
-        y = total['fragment_intensity'].values
-        if window and window > 0:
-            xg, yg = _resample_uniform(x, y)
-            y = _smooth_signal(yg, smoothing_method, window)
-            x = xg
+    # Match calculateAUC total-input behavior: sum all matched fragments per scan/rt,
+    # then (optionally) smooth that single total trace.
+    total = (
+        df.groupby(['scan_number', 'rt'])['fragment_intensity']
+          .sum()
+          .reset_index()
+          .sort_values('rt')
+    )
+    x = total['rt'].values
+    y = total['fragment_intensity'].values
+    if window and window > 0:
+        xg, yg = _resample_uniform(x, y)
+        y = _smooth_signal(yg, smoothing_method, window)
+        x = xg
 
     title_suffix = "" if (window and window > 0) else " (raw)"
     fig, ax = plt.subplots(figsize=figsize)

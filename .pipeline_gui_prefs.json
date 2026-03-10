@@ -1,15 +1,15 @@
 {
-  "output_root": "C:/Users/Vishal/Documents/PRM Pompe Glycomics/Results_03_10_2026",
+  "output_root": "C:/Users/Vishal/Documents/PRM GLYCOMICS STANDARD/Fetuin_no_smoothing",
   "n_workers": "3",
   "ppm_ms1_tol": "10",
   "mz_min": "400",
   "mz_max": "2000",
-  "intensity_threshold": "100.0",
+  "intensity_threshold": "1000.0",
   "ppm_ms2_tol": "10",
   "mz_tol": "0.02",
-  "smoothing_window": "2",
+  "smoothing_window": "4",
   "smoothing_method": "gaussian",
-  "mass_offset": "1",
+  "mass_offset": "0",
   "mz_offset": "0.0",
   "rel_height": "0.9",
   "rel_height_mode": "height",
@@ -18,5 +18,5 @@
   "enable_adduct_plots": true,
   "enable_total_plots": true,
   "skyline_transition": true,
-  "enable_smoothing": true
+  "enable_smoothing": false
 }
