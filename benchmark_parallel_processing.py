@@ -17,9 +17,25 @@ INPUT_FILES = [
     r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\G_7_2_10252024.mzML",
     r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\G_8_1_10252024.mzML",
     r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\G_8_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\G_9_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\G_9_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_1_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_1_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_2_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_2_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_3_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_3_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_4_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_4_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_5_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_5_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_6_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_6_2_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_7_1_10252024.mzML",
+    r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\Pompe_7_2_10252024.mzML"
 ]
 
-OUTPUT_ROOT = Path(r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\parallel_bench_output")
+OUTPUT_ROOT = Path(r"C:\Users\Vishal\Documents\PRM Pompe Glycomics\parallel_bench_output_22_files")
 WORKER_COUNTS = list(range(1, 9))
 REPEATS = 3
 
