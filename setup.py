@@ -14,6 +14,7 @@ setup(
     'statsmodels',
     'scikit-learn',
     'openpyxl',
+    'scienceplots',
     'pyteomics',
     'networkx'
   ],
@@ -28,5 +29,5 @@ setup(
   description = 'A package for glycan PRM quantification',
   author = 'Vishal Sandilya',
   author_email = 'vishal.sandilya@ttu.edu',
-  python_requires='>=3.6'
+  python_requires='>=3.12'
 )
