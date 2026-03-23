@@ -149,7 +149,7 @@ Multi-sample:
 ## Data Availability
 
 The sample data used for development and benchmarking is available via MassIVE: [MSV000101208]
-
+The pacakge is also archived on Zenodo: [![DOI](https://zenodo.org/badge/945763571.svg)](https://doi.org/10.5281/zenodo.19189798)
 
 ## License
 
