@@ -148,7 +148,7 @@ Multi-sample:
 
 ## Data Availability
 
-The sample data used for development and benchmarking is available via MassIVE: [accession]
+The sample data used for development and benchmarking is available via MassIVE: [MSV000101208]
 
 
 ## License
