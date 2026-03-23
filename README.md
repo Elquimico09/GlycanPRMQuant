@@ -51,14 +51,14 @@ From `setup.py`:
 ### External Requirement
 
 - Input files should be in `.mzML` format.  
-  Vendor `.raw` files should be converted with ProteoWizard `msconvert` before running this package.
+  Vendor specific files should be converted with ProteoWizard `msconvert` before running this package.
 
 ## Installation
 
 ### 1) Clone Repository
 
 ```bash
-git clone https://github.com/<your-username>/GlycanPRMQuant.git
+git clone https://github.com/Elquimico09/GlycanPRMQuant.git
 cd GlycanPRMQuant
 ```
 
@@ -145,13 +145,6 @@ Per sample:
 Multi-sample:
 
 - `combined_auc_values.csv` (written after parallel runs with multiple files)
-
-## Benchmarking Helpers Included
-
-- `benchmark_smoothing.py`  
-  Compare smoothing strategies/windows.
-- `benchmark_parallel_processing.py`  
-  Compare runtime across worker counts.
 
 ## License
 
