@@ -146,7 +146,12 @@ Multi-sample:
 
 - `combined_auc_values.csv` (written after parallel runs with multiple files)
 
+## Data Availability
+
+The sample data used for development and benchmarking is available via MassIVE: [accession]
+
+
 ## License
 
-MIT (as specified in `setup.py`).
-
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-green.svg)](https://www.python.org)
