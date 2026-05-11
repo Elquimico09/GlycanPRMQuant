@@ -1,4 +1,5 @@
 import os
+import logging
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,6 +9,8 @@ from scipy.signal import savgol_filter
 
 plt.rcParams["pdf.fonttype"] = 42
 plt.rcParams["ps.fonttype"] = 42
+
+logger = logging.getLogger(__name__)
 
 def _smooth_signal(y, method: str, window: int):
     if not window or window <= 0:
@@ -214,7 +217,7 @@ def calculateAUC(
         mask = (x >= start_rt) & (x <= end_rt)
         auc = np.trapezoid(y_smooth[mask], x[mask])
 
-        print(
+        logger.info(
             f"Glycan {glycan!r}: peak RT={peak_rt:.2f}, "
             f"window=[{start_rt:.2f}, {end_rt:.2f}], AUC={auc:.2f}"
         )
@@ -245,7 +248,7 @@ def calculateAUC(
             plt.tight_layout()
             if save_path:
                 plt.savefig(save_path, dpi=300)
-                print(f"Saved plot to {save_path}")
+                logger.info(f"Saved plot to {save_path}")
             else:
                 plt.show()
 

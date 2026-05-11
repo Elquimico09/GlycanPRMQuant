@@ -1,9 +1,12 @@
 import os
 import sys
+import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import redirect_stdout, redirect_stderr
-from glycanPRMQuant.processmzML import process_mzml_pipeline
 from glycanPRMQuant.consolidateAUC import consolidate_auc_results
+from glycanPRMQuant.logging_utils import configure_logging
+
+logger = logging.getLogger(__name__)
 
 def _process_one_file(
     mzml_path: str,
@@ -49,6 +52,9 @@ def _process_one_file(
         return base, 'dry-run', None
 
     try:
+        configure_logging()
+        from glycanPRMQuant.processmzML import process_mzml_pipeline
+
         process_mzml_pipeline(
             mzml_file=mzml_path,
             output_dir=out_dir,
@@ -127,7 +133,7 @@ def run_parallel_pipeline(
             if fn.lower().endswith('.mzml')
         ]
     if not mzml_files:
-        print("No .mzML files found")
+        logger.warning("No .mzML files found")
         return
 
     # Clamp worker count to a safe upper bound for Windows (ProcessPool has a hard cap)
@@ -173,17 +179,18 @@ def run_parallel_pipeline(
                 if progress_queue:
                     progress_queue.put((base, status, msg))
                 if status == 'done':
-                    print(f"[✓] Finished processing {base}")
+                    logger.info("[✓] Finished processing %s", base)
                 elif status == 'skipped':
-                    print(f"[→] Skipped {base}: {msg}")
+                    logger.info("[→] Skipped %s: %s", base, msg)
                 elif status == 'dry-run':
-                    print(f"[i] Planned (dry-run) {base}")
+                    logger.info("[i] Planned (dry-run) %s", base)
                 else:
-                    print(f"[✗] Error processing {base}: {msg}")
+                    logger.error("[✗] Error processing %s: %s", base, msg)
         if progress_queue:
             progress_queue.put(None)
 
     if log_queue is None:
+        configure_logging()
         _run()
     else:
         class QueueWriter:
@@ -193,6 +200,7 @@ def run_parallel_pipeline(
             def flush(self): pass
         writer = QueueWriter(log_queue)
         with redirect_stdout(writer), redirect_stderr(writer):
+            configure_logging(force=True)
             _run()
         log_queue.put(None)  # sentinel
 
@@ -201,6 +209,6 @@ def run_parallel_pipeline(
         try:
             combined_path = os.path.join(output_root, "combined_auc_values.csv")
             consolidate_auc_results(output_root, combined_path)
-            print(f"[✓] Wrote combined AUC table to {combined_path}")
+            logger.info("[✓] Wrote combined AUC table to %s", combined_path)
         except Exception as e:
-            print(f"[✗] Failed to write combined AUC table: {e}")
+            logger.error("[✗] Failed to write combined AUC table: %s", e)

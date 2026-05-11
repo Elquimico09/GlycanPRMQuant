@@ -1,10 +1,14 @@
 """
 Module for calculating the mass of glycans
 """
+import logging
+
 from glypy.io import iupac
 from glypy.io.iupac import IUPACError
 from glypy.structure import ReducedEnd
 from glypy.composition.composition_transform import derivatize
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_mass(glycan_str, derivatization="methyl", reduced_end=True, verbose=True):
@@ -16,7 +20,7 @@ calculate the mass of the glycan, optionally applying derivatization and setting
         glycan = iupac.loads(glycan_str, dialect="simple")
     except IUPACError as e:
         if verbose:
-            print(f"Error parsing IUPAC string: {e}")
+            logger.error("Error parsing IUPAC string: %s", e)
         return None
 
     try:
@@ -27,7 +31,7 @@ calculate the mass of the glycan, optionally applying derivatization and setting
         return glycan.mass()
     except (KeyError, ValueError) as e:
         if verbose:
-            print(f"Error modifying glycan: {e}")
+            logger.error("Error modifying glycan: %s", e)
         return None
 
 if __name__ == "__main__":

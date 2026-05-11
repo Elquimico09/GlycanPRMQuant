@@ -105,7 +105,7 @@ External requirement:
 Run:
 
 ```bash
-python -m glycanPRMQuant.pipelineGUI
+glycan-prmquant gui
 ```
 
 In the GUI:
@@ -121,6 +121,52 @@ In the GUI:
    - `Max cleavages`: maximum number of cleavages used during theoretical
      fragmentation. Default: `2`.
 6. Choose output options and run.
+
+You can also launch the GUI as a module:
+
+```bash
+python -m glycanPRMQuant.pipelineGUI
+```
+
+## Quick Start: Command Line
+
+Process one file:
+
+```bash
+glycan-prmquant run path/to/sample.mzML path/to/output_dir \
+  --ppm-ms1-tol 10 \
+  --ppm-ms2-tol 10 \
+  --mz-tol 0.02 \
+  --fragment-ion-series BY \
+  --fragment-max-cleavages 2
+```
+
+Process a folder of `.mzML` files:
+
+```bash
+glycan-prmquant batch \
+  --input-dir path/to/mzml_folder \
+  --output-root path/to/results \
+  --workers 4
+```
+
+Process specific files:
+
+```bash
+glycan-prmquant batch \
+  --input-files path/to/file1.mzML path/to/file2.mzML \
+  --output-root path/to/results \
+  --workers 2
+```
+
+Useful CLI flags:
+
+- `--precursor-db-path` and `--structure-db-path` override the bundled
+  `N_glycan_db.csv`.
+- `--skyline-transition` writes Skyline transition lists.
+- `--disable-smoothing` disables chromatogram/AUC smoothing.
+- `--quiet` shows warnings/errors only.
+- `-v` and `-vv` increase logging verbosity.
 
 ## Quick Start: Single File
 

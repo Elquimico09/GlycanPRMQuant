@@ -1,4 +1,5 @@
 import os
+import logging
 import pandas as pd
 import numpy as np
 
@@ -10,6 +11,8 @@ from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments, plot_total_
 from glycanPRMQuant.plotMS2spectrum   import plotMS2spectrum
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
+
+logger = logging.getLogger(__name__)
 
 def _smooth_signal(y, method: str, window: int):
     if not window or window <= 0:
@@ -236,12 +239,12 @@ def process_mzml_pipeline(
     os.makedirs(images_dir, exist_ok=True)
 
     # 1) Extract MS2
-    print(f"Extracting MS2 data from {mzml_file}…")
+    logger.info(f"Extracting MS2 data from {mzml_file}…")
     ms2_data = extractMS2(mzml_file, min_intensity=intensity_threshold)
-    print(f" → Extracted {len(ms2_data)} points")
+    logger.info(f"Extracted {len(ms2_data)} points")
 
     # 2) Match MS1
-    print("Matching MS1 precursors…")
+    logger.info("Matching MS1 precursors…")
     ms1_results = matchMS1(
         ms2_data,
         ppm_tol=ppm_ms1_tol,
@@ -253,10 +256,10 @@ def process_mzml_pipeline(
     )
     ms1_out = os.path.join(output_dir, "ms1_results.csv")
     ms1_results.to_csv(ms1_out, index=False)
-    print(f" → Wrote {len(ms1_results)} MS1 matches")
+    logger.info(f"Wrote {len(ms1_results)} MS1 matches")
 
     if ms1_results.empty:
-        print("No MS1 matches; done.")
+        logger.info("No MS1 matches; done.")
         return
 
     # Pre-filter MS2 by matched precursor m/z values (speed-up)
@@ -267,7 +270,7 @@ def process_mzml_pipeline(
             tol = p * ppm_ms2_tol / 1e6
             mask |= ms2_data['precursor_mz'].between(p - tol, p + tol)
         ms2_data = ms2_data.loc[mask].reset_index(drop=True)
-        print(f" → Pre-filtered MS2 to {len(ms2_data)} rows for matched precursors")
+        logger.info(f"Pre-filtered MS2 to {len(ms2_data)} rows for matched precursors")
 
     all_matched = []
 
@@ -284,7 +287,7 @@ def process_mzml_pipeline(
     effective_window = smoothing_window if enable_smoothing else 0
 
     for glycan in sorted(glycans):
-        print(f"Processing glycan {glycan!r}...")
+        logger.info(f"Processing glycan {glycan!r}...")
         matched_ms2 = matchMS2(
             ms2_data,
             ms1_results,
@@ -297,7 +300,7 @@ def process_mzml_pipeline(
             db_path=structure_db_path
         )
         if matched_ms2.empty:
-            print(f"  -> No MS2 fragments for {glycan!r}")
+            logger.info(f"No MS2 fragments for {glycan!r}")
             continue
 
         # **Normalize** Fragment_mz -> fragment_mz so downstream code sees it
@@ -307,7 +310,7 @@ def process_mzml_pipeline(
         all_matched.append(matched_ms2)
 
     if not all_matched:
-        print("No MS2 matches; done.")
+        logger.info("No MS2 matches; done.")
         return
 
     # Resolve precursor conflicts across glycans
@@ -318,7 +321,7 @@ def process_mzml_pipeline(
     for glycan, sub in all_df.groupby('Glycan'):
         csv_path = os.path.join(output_dir, f"ms2_{glycan}.csv")
         sub.to_csv(csv_path, index=False)
-        print(f"  -> Wrote {len(sub)} MS2 matches to {csv_path}")
+        logger.info(f"Wrote {len(sub)} MS2 matches to {csv_path}")
 
         # Chromatograms per fragment (legacy view)
         chrom_frag_pdf = os.path.join(images_dir, f"ms2_{glycan}.pdf")
@@ -328,9 +331,9 @@ def process_mzml_pipeline(
                                figsize=(6.2, 4),
                                group_col='Fragment',
                                smoothing_method=smoothing_method)
-            print(f"  -> Saved fragment-level chromatogram to {chrom_frag_pdf}")
+            logger.info(f"Saved fragment-level chromatogram to {chrom_frag_pdf}")
         except Exception as e:
-            print(f"  [warn] Fragment chromatogram failed: {e}")
+            logger.warning(f"Fragment chromatogram failed: {e}")
 
         # Chromatogram per precursor adduct
         if enable_adduct_plots:
@@ -340,9 +343,9 @@ def process_mzml_pipeline(
                                    top_n=None, save_path=chrom_adduct_pdf,
                                    group_col='PrecursorAdduct',
                                    smoothing_method=smoothing_method)
-                print(f"  -> Saved precursor-adduct chromatogram to {chrom_adduct_pdf}")
+                logger.info(f"Saved precursor-adduct chromatogram to {chrom_adduct_pdf}")
             except Exception as e:
-                print(f"  [warn] Precursor-adduct chromatogram failed: {e}")
+                logger.warning(f"Precursor-adduct chromatogram failed: {e}")
 
         # Total chromatogram (all fragments/adducts summed)
         if enable_total_plots:
@@ -352,21 +355,21 @@ def process_mzml_pipeline(
                                    top_n=None, save_path=chrom_total_pdf,
                                    group_col=None,
                                    smoothing_method=smoothing_method)
-                print(f"  -> Saved total chromatogram to {chrom_total_pdf}")
+                logger.info(f"Saved total chromatogram to {chrom_total_pdf}")
             except Exception as e:
-                print(f"  [warn] Total chromatogram failed: {e}")
+                logger.warning(f"Total chromatogram failed: {e}")
 
         # averaged spectrum
         spec_pdf = os.path.join(images_dir, f"ms2_{glycan}_ms2spectrum.pdf")
         try:
             plotMS2spectrum(csv_path, window_minutes=spectrum_window_minutes,
                             top_n=fragment_top_n, save_path=spec_pdf)
-            print(f"  -> Saved spectrum to {spec_pdf}")
+            logger.info(f"Saved spectrum to {spec_pdf}")
         except Exception as e:
-            print(f"  [warn] Spectrum plot failed: {e}")
+            logger.warning(f"Spectrum plot failed: {e}")
     # 4) AUC
     if not all_df.empty:
-        print("Calculating AUC...")
+        logger.info("Calculating AUC...")
         per_adduct_df, total_df = calculateAUC(
             all_df,
             smoothing_window=effective_window,
@@ -379,12 +382,12 @@ def process_mzml_pipeline(
         # Total AUC (backward compatible filename)
         auc_path = os.path.join(output_dir, f"{base_name}_auc_values.csv")
         total_df.to_csv(auc_path, index=False)
-        print(f" -> Wrote total AUC (summed across adducts) to {auc_path}")
+        logger.info(f"Wrote total AUC (summed across adducts) to {auc_path}")
 
         # Per-adduct detail
         auc_adduct_path = os.path.join(output_dir, f"{base_name}_auc_values_by_adduct.csv")
         per_adduct_df.to_csv(auc_adduct_path, index=False)
-        print(f" -> Wrote per-adduct AUC values to {auc_adduct_path}")
+        logger.info(f"Wrote per-adduct AUC values to {auc_adduct_path}")
 
         # Compute total-window boundaries for shaded AUC plots
         total_window_df = _compute_total_window_boundaries(
@@ -416,9 +419,9 @@ def process_mzml_pipeline(
                     start_rt=start_rt,
                     end_rt=end_rt
                 )
-                print(f"  -> Saved total chromatogram with AUC window to {shaded_pdf}")
+                logger.info(f"Saved total chromatogram with AUC window to {shaded_pdf}")
             except Exception as e:
-                print(f"  [warn] Total AUC chromatogram failed: {e}")
+                logger.warning(f"Total AUC chromatogram failed: {e}")
 
     # 6) Skyline transition export (unique fragments, apex RT per glycan)
     if skyline_transition and not all_df.empty:
@@ -438,6 +441,6 @@ def process_mzml_pipeline(
         trans_df['Retention time'] = trans_df['Glycan'].map(apex_rt)
         trans_path = os.path.join(output_dir, f"{base_name}_skyline_transitions.xlsx")
         trans_df.to_excel(trans_path, index=False)
-        print(f" → Wrote Skyline transition list to {trans_path}")
+        logger.info(f"Wrote Skyline transition list to {trans_path}")
 
-    print("Done.")
+    logger.info("Done.")

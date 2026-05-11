@@ -1,9 +1,13 @@
+import logging
+
 import pandas as pd
 import numpy as np
 from scipy.spatial import cKDTree
 from .constants import DEFAULT_PRECURSOR_DB
 from .fragment_structure import fragment_glycan
 import os
+
+logger = logging.getLogger(__name__)
 
 _FRAG_DB_CACHE = {}
 
@@ -91,8 +95,8 @@ def _build_fragment_db(
         frag_db = pd.concat(rows, ignore_index=True)
 
     if skipped:
-        print(f"Skipped {skipped} IUPAC structures for {precursor_composition} because fragmentation failed")
-    print(
+        logger.warning(f"Skipped {skipped} IUPAC structures for {precursor_composition} because fragmentation failed")
+    logger.info(
         f"Generated {len(frag_db)} theoretical fragments for "
         f"{candidates.shape[0] - skipped}/{candidates.shape[0]} IUPAC structures of {precursor_composition}"
     )
@@ -214,7 +218,7 @@ def preprocess_ms2_data(ms2: pd.DataFrame, mz_tol: float = 0.1) -> pd.DataFrame:
             row['fragment_intensity'] = sub['fragment_intensity'].sum()
             out.append(row)
     result = pd.DataFrame(out).reset_index(drop=True)
-    print(f"Preprocessed MS2 data: {len(ms2)} → {len(result)} fragments")
+    logger.info(f"Preprocessed MS2 data: {len(ms2)} -> {len(result)} fragments")
     return result
 
 
@@ -253,12 +257,12 @@ def matchMS2(
         max_cleavages=max_cleavages
     )
     if dbf.empty:
-        print(f"No fragmentable IUPAC database entries for {precursor_composition}")
+        logger.info(f"No fragmentable IUPAC database entries for {precursor_composition}")
         return pd.DataFrame()
 
     adduct_df = _build_adduct_table(dbf, precursor_composition)
     if adduct_df.empty:
-        print(f"No theoretical fragment adducts for {precursor_composition}")
+        logger.info(f"No theoretical fragment adducts for {precursor_composition}")
         return pd.DataFrame()
 
     theo_mzs = adduct_df['Theo_mz'].to_numpy()
@@ -275,7 +279,7 @@ def matchMS2(
         precursor_matched_data['Glycan'] == precursor_composition
     ][['precursor_mz', 'Adduct']]
     if prec_rows.empty:
-        print(f"No MS1 precursor matches for {precursor_composition}")
+        logger.info(f"No MS1 precursor matches for {precursor_composition}")
         return pd.DataFrame()
 
     filt = []
@@ -291,7 +295,7 @@ def matchMS2(
             filt.append(sel.assign(Glycan=precursor_composition,
                                    PrecursorAdduct=adduct_label))
     if not filt:
-        print(f"No MS2 data after filtering for {precursor_composition}")
+        logger.info(f"No MS2 data after filtering for {precursor_composition}")
         return pd.DataFrame()
     ms2f = pd.concat(filt, ignore_index=True)
 
@@ -331,7 +335,7 @@ def matchMS2(
             matched.append(row)
 
     if not matched:
-        print(f"No fragments matched for {precursor_composition}")
+        logger.info(f"No fragments matched for {precursor_composition}")
         return pd.DataFrame()
 
     all_matches = pd.DataFrame(matched)
@@ -355,11 +359,11 @@ def matchMS2(
     out['IUPAC_unique_fragments'] = int(best['unique_fragments'])
     out['IUPAC_total_intensity'] = float(best['total_intensity'])
 
-    print(f"Selected IUPAC for {precursor_composition}: {best['IUPAC']}")
-    print(
+    logger.info(f"Selected IUPAC for {precursor_composition}: {best['IUPAC']}")
+    logger.info(
         f"Structure score: {int(best['match_count'])} matches, "
         f"{int(best['unique_fragments'])} unique fragments"
     )
-    print(f"Matched {len(out)} fragments for {precursor_composition}:")
-    print(out['Charge'].value_counts().rename_axis('Charge').to_string())
+    logger.info(f"Matched {len(out)} fragments for {precursor_composition}:")
+    logger.info("\n%s", out['Charge'].value_counts().rename_axis('Charge').to_string())
     return out

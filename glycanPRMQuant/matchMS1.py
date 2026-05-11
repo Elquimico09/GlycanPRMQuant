@@ -1,7 +1,11 @@
+import logging
+
 import pandas as pd
 import os
 from .constants import PROTON_MASS, NH4_MASS, DEFAULT_PRECURSOR_DB
 from .calculate_mass import calculate_mass
+
+logger = logging.getLogger(__name__)
 
 _DB_CACHE = {}
 
@@ -45,7 +49,7 @@ def _load_precursor_db(db_path: str, mass_offset: float = 0.0, mz_offset: float 
         if col not in db.columns:
             raise ValueError(f"Missing required column '{col}' in the database")
     if mass_offset != 0.0:
-        print(f"Applying mass offset of {mass_offset} Da to all Glycans")
+        logger.info(f"Applying mass offset of {mass_offset} Da to all Glycans")
         db = db.copy()
         db['[M]'] = db['[M]'] + mass_offset
     db = db.copy()
@@ -55,7 +59,7 @@ def _load_precursor_db(db_path: str, mass_offset: float = 0.0, mz_offset: float 
     db['mz_H_NH4']  = (db['[M]'] + PROTON_MASS + NH4_MASS) / 2
     db['mz_2NH4']   = (db['[M]'] + 2*NH4_MASS)        / 2
     if mz_offset:
-        print(f"Applying m/z offset of {mz_offset} Da to all adducts")
+        logger.info(f"Applying m/z offset of {mz_offset} Da to all adducts")
         db[['mz_2H','mz_3H','mz_4H','mz_H_NH4','mz_2NH4']] = db[['mz_2H','mz_3H','mz_4H','mz_H_NH4','mz_2NH4']] + mz_offset
     _DB_CACHE[key] = db
     return db.copy()
@@ -106,10 +110,10 @@ def _calculate_precursor_masses(raw_db: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("No precursor masses could be calculated from the IUPAC database")
 
     if failed:
-        print(f"Skipped {len(failed)} compositions because mass calculation failed")
+        logger.warning(f"Skipped {len(failed)} compositions because mass calculation failed")
 
     db = pd.DataFrame(rows)
-    print(
+    logger.info(
         f"Calculated neutral masses for {len(db)} unique compositions "
         f"from {len(raw_db)} IUPAC database rows"
     )
@@ -131,13 +135,13 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
     :param db_path: Path to glycan database CSV/Excel file. If None, uses default.
     :return: DataFrame with columns ['precursor_mz','Glycan'].
     """
-    print(f"Starting MS1 matching with ±{ppm_tol} ppm tolerance")
-    print("Loading glycan database...")
+    logger.info(f"Starting MS1 matching with ±{ppm_tol} ppm tolerance")
+    logger.info("Loading glycan database...")
 
     if db_path is None:
         db_path = DEFAULT_PRECURSOR_DB
     db = _load_precursor_db(db_path, mass_offset=mass_offset, mz_offset=mz_offset)
-    print(f"Loaded {len(db)} glycan entries")
+    logger.info(f"Loaded {len(db)} glycan entries")
 
     adduct_cols = ['mz_2H','mz_3H','mz_4H','mz_H_NH4','mz_2NH4']
     adduct_labels = {
@@ -153,10 +157,10 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
         (ms1_data['precursor_mz'] >= mz_min) &
         (ms1_data['precursor_mz'] <= mz_max)
     ]
-    print(f"Filtered MS1 to {len(ms1)} scans in {mz_min}-{mz_max} m/z")
+    logger.info(f"Filtered MS1 to {len(ms1)} scans in {mz_min}-{mz_max} m/z")
 
     unique_prec = ms1['precursor_mz'].unique()
-    print(f"{len(unique_prec)} unique precursor m/z values to match")
+    logger.info(f"{len(unique_prec)} unique precursor m/z values to match")
 
     matches = []
     total_matches = 0
@@ -164,7 +168,7 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
     for i, prec in enumerate(unique_prec, 1):
         if i % 100 == 0:
             total_matches = len(matches)
-            print(f"  Processed {i}/{len(unique_prec)} precursors, {total_matches} matches so far")
+            logger.info(f"Processed {i}/{len(unique_prec)} precursors, {total_matches} matches so far")
         tol = prec * ppm_tol / 1e6
 
         for col in adduct_cols:
@@ -185,5 +189,5 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
     df_out = pd.DataFrame(matches, columns=out_cols)
     total_matches = len(df_out)
     matched_precursors = df_out['precursor_mz'].nunique() if not df_out.empty else 0
-    print(f"Matching complete: {matched_precursors} precursors with matches, {total_matches} total matches")
+    logger.info(f"Matching complete: {matched_precursors} precursors with matches, {total_matches} total matches")
     return df_out

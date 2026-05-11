@@ -18,6 +18,11 @@ setup(
     'pyteomics',
     'glypy'
   ],
+  entry_points={
+    'console_scripts': [
+      'glycan-prmquant=glycanPRMQuant.cli:main',
+    ],
+  },
   description = 'A package for glycan PRM quantification',
   author = 'Vishal Sandilya',
   author_email = 'vishal.sandilya@ttu.edu',
