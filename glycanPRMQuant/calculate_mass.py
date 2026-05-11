@@ -7,7 +7,7 @@ from glypy.structure import ReducedEnd
 from glypy.composition.composition_transform import derivatize
 
 
-def calculate_mass(glycan_str, derivatization="methyl", reduced_end=True):
+def calculate_mass(glycan_str, derivatization="methyl", reduced_end=True, verbose=True):
     """
     Given an IUPAC string,
 calculate the mass of the glycan, optionally applying derivatization and setting a reduced end.
@@ -15,7 +15,8 @@ calculate the mass of the glycan, optionally applying derivatization and setting
     try:
         glycan = iupac.loads(glycan_str, dialect="simple")
     except IUPACError as e:
-        print(f"Error parsing IUPAC string: {e}")
+        if verbose:
+            print(f"Error parsing IUPAC string: {e}")
         return None
 
     try:
@@ -25,7 +26,8 @@ calculate the mass of the glycan, optionally applying derivatization and setting
             derivatize(glycan, derivatization)
         return glycan.mass()
     except (KeyError, ValueError) as e:
-        print(f"Error modifying glycan: {e}")
+        if verbose:
+            print(f"Error modifying glycan: {e}")
         return None
 
 if __name__ == "__main__":

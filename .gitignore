@@ -1,2 +1,11 @@
 sample_data/
-glycanPRMQuant/__pycache__/
+__pycache__/
+*.py[cod]
+*$py.class
+
+.DS_Store
+.pipeline_gui_prefs.json
+
+*.egg-info/
+build/
+dist/

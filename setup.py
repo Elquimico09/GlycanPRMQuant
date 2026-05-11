@@ -16,16 +16,8 @@ setup(
     'openpyxl',
     'scienceplots',
     'pyteomics',
-    'networkx'
+    'glypy'
   ],
-  extras_require={
-    'gui': ['PyQt5>=5.15.0'],
-  },
-  entry_points={
-    'console_scripts': [
-      'glycan-builder-gui=glycanPRMQuant.glycanBuilderGUI:launch_gui',
-    ],
-  },
   description = 'A package for glycan PRM quantification',
   author = 'Vishal Sandilya',
   author_email = 'vishal.sandilya@ttu.edu',

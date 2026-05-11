@@ -224,7 +224,11 @@ def process_mzml_pipeline(
     rel_height: float = 0.7,
     rel_height_mode: str = "prominence",
     skyline_transition: bool = False,
-    enable_smoothing: bool = True
+    enable_smoothing: bool = True,
+    fragment_ion_series: str = "ABCXYZ",
+    fragment_max_cleavages: int = 2,
+    precursor_db_path: str = None,
+    structure_db_path: str = None
 ):
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
     os.makedirs(output_dir, exist_ok=True)
@@ -244,7 +248,8 @@ def process_mzml_pipeline(
         mz_min=mz_min,
         mz_max=mz_max,
         mz_offset=mz_offset,
-        mass_offset=mass_offset
+        mass_offset=mass_offset,
+        db_path=precursor_db_path
     )
     ms1_out = os.path.join(output_dir, "ms1_results.csv")
     ms1_results.to_csv(ms1_out, index=False)
@@ -286,7 +291,10 @@ def process_mzml_pipeline(
             precursor_composition=glycan,
             ppm_tol=ppm_ms2_tol,
             mz_tol=mz_tol,
-            intensity_threshold=intensity_threshold
+            intensity_threshold=intensity_threshold,
+            ion_series=fragment_ion_series,
+            max_cleavages=fragment_max_cleavages,
+            db_path=structure_db_path
         )
         if matched_ms2.empty:
             print(f"  -> No MS2 fragments for {glycan!r}")

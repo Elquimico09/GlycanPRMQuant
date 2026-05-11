@@ -5,10 +5,12 @@ This module contains all physical and chemical constants used throughout
 the package to ensure consistency across modules.
 """
 
+from .resources import resource_path
+
 # Mass constants (in Daltons)
 PROTON_MASS = 1.007276
 NH4_MASS = 18.033826  # Ammonium adduct mass
 
-# Default file paths (relative to package root)
-DEFAULT_PRECURSOR_DB = "database/glycan_precursor_mz_list.xlsx"
-DEFAULT_FRAGMENT_DB = "database/fragment_database.csv"
+# Default file paths
+DEFAULT_PRECURSOR_DB = resource_path("database/N_glycan_db.csv")
+DEFAULT_FRAGMENT_DB = resource_path("database/fragment_database.csv")

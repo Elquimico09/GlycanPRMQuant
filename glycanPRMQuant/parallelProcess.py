@@ -14,6 +14,8 @@ def _process_one_file(
     intensity_threshold: float,
     ppm_ms2_tol: float,
     mz_tol: float,
+    fragment_ion_series: str,
+    fragment_max_cleavages: int,
     smoothing_window: int,
     smoothing_method: str = "gaussian",
     mz_offset: float = 0.0,
@@ -25,7 +27,9 @@ def _process_one_file(
     rel_height: float = 0.7,
     rel_height_mode: str = "prominence",
     skyline_transition: bool = False,
-    enable_smoothing: bool = True
+    enable_smoothing: bool = True,
+    precursor_db_path: str = None,
+    structure_db_path: str = None
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -54,6 +58,8 @@ def _process_one_file(
             intensity_threshold=intensity_threshold,
             ppm_ms2_tol=ppm_ms2_tol,
             mz_tol=mz_tol,
+            fragment_ion_series=fragment_ion_series,
+            fragment_max_cleavages=fragment_max_cleavages,
             smoothing_window=smoothing_window,
             smoothing_method=smoothing_method,
             mz_offset=mz_offset,
@@ -63,7 +69,9 @@ def _process_one_file(
             rel_height=rel_height,
             rel_height_mode=rel_height_mode,
             skyline_transition=skyline_transition,
-            enable_smoothing=enable_smoothing
+            enable_smoothing=enable_smoothing,
+            precursor_db_path=precursor_db_path,
+            structure_db_path=structure_db_path
         )
         return base, 'done', None
     except Exception as e:
@@ -80,6 +88,8 @@ def run_parallel_pipeline(
     intensity_threshold: float = 1e2,
     ppm_ms2_tol: float = 50,
     mz_tol: float = 0.05,
+    fragment_ion_series: str = "ABCXYZ",
+    fragment_max_cleavages: int = 2,
     smoothing_window: int = 20,
     smoothing_method: str = "gaussian",
     mz_offset: float = 0.0,
@@ -92,6 +102,8 @@ def run_parallel_pipeline(
     rel_height_mode: str = "prominence",
     skyline_transition: bool = False,
     enable_smoothing: bool = True,
+    precursor_db_path: str = None,
+    structure_db_path: str = None,
     log_queue=None,
     progress_queue=None
 ):
@@ -138,6 +150,8 @@ def run_parallel_pipeline(
                     intensity_threshold,
                     ppm_ms2_tol,
                     mz_tol,
+                    fragment_ion_series,
+                    fragment_max_cleavages,
                     smoothing_window,
                     smoothing_method,
                     mz_offset,
@@ -149,7 +163,9 @@ def run_parallel_pipeline(
                     rel_height,
                     rel_height_mode,
                     skyline_transition,
-                    enable_smoothing
+                    enable_smoothing,
+                    precursor_db_path,
+                    structure_db_path
                 ): path for path in mzml_files
             }
             for fut in as_completed(futures):

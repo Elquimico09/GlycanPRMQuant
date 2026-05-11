@@ -7,6 +7,7 @@ from glypy.composition.composition_transform import derivatize
 
 def fragment_glycan(iupac_str: str,
                     ion_series: str = "ABCXYZ",
+                    max_cleavages: int = 2,
                     reduced_end: bool = True,
                     derivatization: str | None = "methyl") -> pd.DataFrame:
     """
@@ -18,6 +19,8 @@ def fragment_glycan(iupac_str: str,
         The IUPAC name of the glycan.
     ion_series : str, optional
         The series of ions to fragment, by default "ABCXYZ".
+    max_cleavages : int, optional
+        Maximum number of glycosidic/cross-ring cleavages per fragment, by default 2.
     reduced_end : bool, optional
         Whether to use a reduced end, by default True.
     derivatization : str | None, optional
@@ -42,12 +45,13 @@ def fragment_glycan(iupac_str: str,
     AMMONIUM_MASS = 18.033826
     fragments = []
 
-    for frag in glycan.fragment(kind = ion_series, max_cleavages=2):
-        neutral_mass = frag.mass()
+    for frag in glycan.fragments(kind = ion_series, max_cleavages=max_cleavages):
+        neutral_mass = frag.mass() if callable(frag.mass) else frag.mass
         series = frag.series
+        fragment_name = getattr(frag, "name", None) or str(frag)
 
         fragments.append({
-            "name": str(frag),
+            "name": fragment_name,
             "series": series,
             "neutral_mass": neutral_mass,
             "[M+H]+": neutral_mass + PROTON_MASS,
@@ -56,6 +60,11 @@ def fragment_glycan(iupac_str: str,
             "[M+NH4+H]2+": (neutral_mass + AMMONIUM_MASS + PROTON_MASS) / 2,
             "[M+2NH4]2+": (neutral_mass + 2 * AMMONIUM_MASS) / 2,
         })
-    
+
     df = pd.DataFrame(fragments)
     return df
+
+if __name__ == "__main__":
+    iupac_str = "Man(a1-2)Man(a1-3)[Man(a1-3)[Man(a1-6)]Man(a1-6)]Man(b1-4)GlcNAc(b1-4)GlcNAc"
+    df = fragment_glycan(iupac_str)
+    print(df)

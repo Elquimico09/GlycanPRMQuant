@@ -128,6 +128,20 @@ class PipelineGUI(tk.Tk):
         self.out_dir = tk.StringVar()
         ttk.Entry(io_frame, textvariable=self.out_dir, width=40).grid(column=1, row=2, columnspan=2, padx=8, pady=6, sticky="w")
         ttk.Button(io_frame, text="Browse", command=self._choose_output).grid(column=3, row=2, padx=8, pady=6)
+
+        tk.Label(io_frame, text="Precursor DB:", bg=self._colors["panel"], fg=self._colors["text"]) \
+            .grid(column=0, row=3, sticky="w", padx=8, pady=6)
+        self.precursor_db_path = tk.StringVar()
+        ttk.Entry(io_frame, textvariable=self.precursor_db_path, width=40) \
+            .grid(column=1, row=3, columnspan=2, padx=8, pady=6, sticky="w")
+        ttk.Button(io_frame, text="Browse", command=self._choose_precursor_db).grid(column=3, row=3, padx=8, pady=6)
+
+        tk.Label(io_frame, text="Structure DB:", bg=self._colors["panel"], fg=self._colors["text"]) \
+            .grid(column=0, row=4, sticky="w", padx=8, pady=6)
+        self.structure_db_path = tk.StringVar()
+        ttk.Entry(io_frame, textvariable=self.structure_db_path, width=40) \
+            .grid(column=1, row=4, columnspan=2, padx=8, pady=6, sticky="w")
+        ttk.Button(io_frame, text="Browse", command=self._choose_structure_db).grid(column=3, row=4, padx=8, pady=6)
         row += 1
 
         # Numeric parameters arranged in 3 columns
@@ -140,6 +154,7 @@ class PipelineGUI(tk.Tk):
             ("MS2 intensity", 1e2),
             ("MS2 ppm tol", 10),
             ("MS2 m/z tol", 0.02),
+            ("Max cleavages", 2),
             ("Smoothing window", 5),
             ("Mass offset", 0.0),
             ("m/z offset", 0.0),
@@ -162,6 +177,7 @@ class PipelineGUI(tk.Tk):
         self.intensity_threshold = self._param_vars["MS2 intensity"]
         self.ppm_ms2_tol = self._param_vars["MS2 ppm tol"]
         self.mz_tol = self._param_vars["MS2 m/z tol"]
+        self.fragment_max_cleavages = self._param_vars["Max cleavages"]
         self.smoothing_window = self._param_vars["Smoothing window"]
         self.mass_offset = self._param_vars["Mass offset"]
         self.mz_offset = self._param_vars["m/z offset"]
@@ -188,6 +204,11 @@ class PipelineGUI(tk.Tk):
             state="readonly",
             width=12
         ).grid(column=3, row=base_row + 4, padx=8, pady=6, sticky="w")
+
+        ttk.Label(params_frame, text="Fragment ion series").grid(column=4, row=base_row + 4, sticky="w", padx=8, pady=6)
+        self.fragment_ion_series = tk.StringVar(value="ABCXYZ")
+        ttk.Entry(params_frame, textvariable=self.fragment_ion_series, width=14) \
+            .grid(column=5, row=base_row + 4, padx=8, pady=6, sticky="w")
         row += 1
 
         # Toggles
@@ -267,6 +288,20 @@ class PipelineGUI(tk.Tk):
         if d:
             self.out_dir.set(d)
 
+    def _choose_precursor_db(self):
+        path = filedialog.askopenfilename(
+            filetypes=[("Database files", "*.csv *.xlsx *.xls"), ("All files", "*.*")]
+        )
+        if path:
+            self.precursor_db_path.set(path)
+
+    def _choose_structure_db(self):
+        path = filedialog.askopenfilename(
+            filetypes=[("Database files", "*.csv *.xlsx *.xls"), ("All files", "*.*")]
+        )
+        if path:
+            self.structure_db_path.set(path)
+
     def _on_run(self):
         # gather parameters
         try:
@@ -274,6 +309,8 @@ class PipelineGUI(tk.Tk):
                 "input_files": self.selected_files,
                 "input_dir": None,
                 "output_root": self.out_dir.get(),
+                "precursor_db_path": self.precursor_db_path.get().strip() or None,
+                "structure_db_path": self.structure_db_path.get().strip() or None,
                 "n_workers": int(self.n_workers.get()),
                 "ppm_ms1_tol": float(self.ppm_ms1_tol.get()),
                 "mz_min": float(self.mz_min.get()),
@@ -281,6 +318,8 @@ class PipelineGUI(tk.Tk):
                 "intensity_threshold": float(self.intensity_threshold.get()),
                 "ppm_ms2_tol": float(self.ppm_ms2_tol.get()),
                 "mz_tol": float(self.mz_tol.get()),
+                "fragment_ion_series": self.fragment_ion_series.get(),
+                "fragment_max_cleavages": int(self.fragment_max_cleavages.get()),
                 "smoothing_window": int(self.smoothing_window.get()),
                 "smoothing_method": self.smoothing_method.get(),
                 "mass_offset": float(self.mass_offset.get()),
@@ -306,6 +345,10 @@ class PipelineGUI(tk.Tk):
         if not os.path.isdir(params["output_root"]):
             messagebox.showerror("Output error", "Output directory does not exist")
             return
+        for label, key in [("Precursor DB", "precursor_db_path"), ("Structure DB", "structure_db_path")]:
+            if params[key] and not os.path.isfile(params[key]):
+                messagebox.showerror("Input error", f"{label} does not exist: {params[key]}")
+                return
         if params["mz_min"] >= params["mz_max"]:
             messagebox.showerror("Parameter error", "MS1 m/z min must be < m/z max")
             return
@@ -313,6 +356,9 @@ class PipelineGUI(tk.Tk):
             params["n_workers"] = os.cpu_count() or 1
         if params["n_workers"] > 61:
             params["n_workers"] = 61
+        if params["fragment_max_cleavages"] < 1:
+            messagebox.showerror("Parameter error", "Max cleavages must be >= 1")
+            return
         self.status_var.set(f"Running... files={len(params['input_files'])}, workers={params['n_workers']}")
 
         self._save_prefs()
@@ -428,6 +474,8 @@ class PipelineGUI(tk.Tk):
     def _save_prefs(self):
         prefs = {
             "output_root": self.out_dir.get(),
+            "precursor_db_path": self.precursor_db_path.get(),
+            "structure_db_path": self.structure_db_path.get(),
             "n_workers": self.n_workers.get(),
             "ppm_ms1_tol": self.ppm_ms1_tol.get(),
             "mz_min": self.mz_min.get(),
@@ -435,6 +483,8 @@ class PipelineGUI(tk.Tk):
             "intensity_threshold": self.intensity_threshold.get(),
             "ppm_ms2_tol": self.ppm_ms2_tol.get(),
             "mz_tol": self.mz_tol.get(),
+            "fragment_ion_series": self.fragment_ion_series.get(),
+            "fragment_max_cleavages": self.fragment_max_cleavages.get(),
             "smoothing_window": self.smoothing_window.get(),
             "smoothing_method": self.smoothing_method.get(),
             "mass_offset": self.mass_offset.get(),
@@ -464,6 +514,10 @@ class PipelineGUI(tk.Tk):
             return
         if "output_root" in prefs:
             self.out_dir.set(prefs["output_root"])
+        if "precursor_db_path" in prefs:
+            self.precursor_db_path.set(prefs["precursor_db_path"])
+        if "structure_db_path" in prefs:
+            self.structure_db_path.set(prefs["structure_db_path"])
         for key, var in [
             ("n_workers", self.n_workers),
             ("ppm_ms1_tol", self.ppm_ms1_tol),
@@ -472,6 +526,8 @@ class PipelineGUI(tk.Tk):
             ("intensity_threshold", self.intensity_threshold),
             ("ppm_ms2_tol", self.ppm_ms2_tol),
             ("mz_tol", self.mz_tol),
+            ("fragment_ion_series", self.fragment_ion_series),
+            ("fragment_max_cleavages", self.fragment_max_cleavages),
             ("smoothing_window", self.smoothing_window),
             ("smoothing_method", self.smoothing_method),
             ("mass_offset", self.mass_offset),

@@ -1,36 +1,87 @@
 # glycanPRMQuant
 
-`glycanPRMQuant` is a Python package for targeted PRM glycomics analysis from mzML data.  
-It supports glycan precursor matching, fragment matching, chromatogram generation, peak-boundary/AUC quantification, and batch processing with optional GUI workflows.
+`glycanPRMQuant` is a Python package for targeted PRM glycomics analysis from
+`.mzML` data. It extracts MS2 spectra, matches precursor ions to N-glycan
+compositions, generates theoretical fragments from IUPAC structures, resolves
+likely structures, plots chromatograms/spectra, and quantifies glycan signal by
+AUC.
 
-## Package Information
+The package can be run from a Tkinter GUI for batch processing or called
+programmatically from Python.
 
-- Extracts MS2 data from `.mzML` files
-- Matches precursor ions to glycan/adduct hypotheses (MS1)
-- Matches fragment ions to glycan-specific fragments (MS2)
-- Resolves ambiguous precursor-to-glycan assignments
-- Generates chromatogram and spectrum figures
-- Quantifies glycan signals with configurable AUC boundary logic (`rel_height`, mode)
-- Processes files in parallel and consolidates AUC outputs across samples
+## What It Does
 
-## Main Components
+- Reads vendor-converted `.mzML` files with `pyteomics`.
+- Matches MS1 precursor m/z values against glycan compositions.
+- Calculates precursor neutral masses from `database/N_glycan_db.csv` using
+  `glypy`, grouped once per `Composition`.
+- Generates theoretical MS2 fragments from each candidate `Condensed IUPAC`
+  structure for a matched numerical composition.
+- Scores candidate IUPAC structures and returns the most likely structure with
+  the numerical composition.
+- Supports configurable fragment ion series, maximum cleavage count, m/z
+  tolerances, intensity thresholds, smoothing, and AUC boundary logic.
+- Produces per-glycan MS2 CSV files, chromatograms, spectra, AUC tables, and
+  optional Skyline transition lists.
+- Runs one file or many files in parallel.
+
+## Repository Layout
 
 - `glycanPRMQuant/processmzML.py`  
-  Single-file end-to-end processing (`process_mzml_pipeline`).
+  Single-file end-to-end pipeline: extraction, MS1 matching, MS2 matching,
+  plotting, AUC, and optional Skyline export.
 - `glycanPRMQuant/parallelProcess.py`  
-  Parallel multi-file processing (`run_parallel_pipeline`).
-- `glycanPRMQuant/calculateAUC.py`  
-  Peak boundary detection and AUC integration.
+  Parallel multi-file runner used by the GUI and programmatic batch workflows.
 - `glycanPRMQuant/pipelineGUI.py`  
-  Tkinter GUI for batch pipeline runs.
-- `glycanPRMQuant/glycanBuilderGUI.py`  
-  GUI for glycan structure building/visualization.
+  Tkinter GUI for selecting input files, output folder, matching parameters,
+  plotting options, DB overrides, and batch execution.
+- `glycanPRMQuant/matchMS1.py`  
+  Precursor matching. Uses the N-glycan database by default and calculates
+  neutral masses from grouped IUPAC compositions.
+- `glycanPRMQuant/matchMS2.py`  
+  Fragment matching. Generates fragments from IUPAC candidates, matches
+  observed fragments, and selects the best IUPAC structure.
+- `glycanPRMQuant/fragment_structure.py`  
+  `glypy`-based theoretical glycan fragmentation.
+- `glycanPRMQuant/calculateAUC.py`  
+  Peak picking, integration windows, smoothing, and AUC summarization.
+- `glycanPRMQuant/plotFragmentIntensity.py` and `plotMS2spectrum.py`  
+  Chromatogram and spectrum plotting utilities.
+- `database/N_glycan_db.csv`  
+  Default structure database with `Condensed IUPAC`, `Composition`, and
+  `Numerical Composition` columns.
+
+## Installation
+
+Clone the repository and install it in editable mode:
+
+```bash
+git clone https://github.com/Elquimico09/GlycanPRMQuant.git
+cd GlycanPRMQuant
+python -m venv .venv
+```
+
+Activate the environment:
+
+```bash
+# Windows
+.venv\Scripts\activate
+
+# macOS/Linux
+source .venv/bin/activate
+```
+
+Install:
+
+```bash
+pip install -e .
+```
+
+The package expects Python `>=3.12`.
 
 ## Dependencies
 
-### Core Python Dependencies
-
-From `setup.py`:
+Installed by `setup.py`:
 
 - `numpy`
 - `pandas`
@@ -40,63 +91,38 @@ From `setup.py`:
 - `statsmodels`
 - `scikit-learn`
 - `openpyxl`
+- `scienceplots`
 - `pyteomics`
-- `networkx`
+- `glypy`
 
-### Optional / Workflow-Specific
+External requirement:
 
-- `PyQt5` (for glycan builder GUI): install via `.[gui]`
-- `scienceplots` (used by multiple plotting modules for figure style)
+- Input data must be in `.mzML` format. Convert vendor files with ProteoWizard
+  `msconvert` before running the pipeline.
 
-### External Requirement
+## Quick Start: GUI
 
-- Input files should be in `.mzML` format.  
-  Vendor specific files should be converted with ProteoWizard `msconvert` before running this package.
-
-## Installation
-
-### 1) Clone Repository
-
-```bash
-git clone https://github.com/Elquimico09/GlycanPRMQuant.git
-cd GlycanPRMQuant
-```
-
-### 2) Create Environment (Recommended)
-
-```bash
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-```
-
-### 3) Install Package
-
-```bash
-pip install -e .
-```
-
-### 4) Install Optional Dependencies
-
-```bash
-# Plot styling used in several figure scripts
-pip install scienceplots
-
-# Glycan builder GUI support
-pip install -e .[gui]
-```
-
-## Quick Start
-
-### Run Batch Pipeline GUI
+Run:
 
 ```bash
 python -m glycanPRMQuant.pipelineGUI
 ```
 
-### Run Programmatically (Single File)
+In the GUI:
+
+1. Select one or more `.mzML` files.
+2. Select an output folder.
+3. Optionally provide custom precursor/structure DB files. Leave blank to use
+   the bundled `database/N_glycan_db.csv`.
+4. Set MS1/MS2 tolerances and intensity thresholds.
+5. Set fragment options:
+   - `Fragment ion series`: any combination of `A`, `B`, `C`, `X`, `Y`, `Z`.
+     Default: `ABCXYZ`.
+   - `Max cleavages`: maximum number of cleavages used during theoretical
+     fragmentation. Default: `2`.
+6. Choose output options and run.
+
+## Quick Start: Single File
 
 ```python
 from glycanPRMQuant.processmzML import process_mzml_pipeline
@@ -110,46 +136,166 @@ process_mzml_pipeline(
     intensity_threshold=1e2,
     ppm_ms2_tol=10,
     mz_tol=0.02,
+    fragment_ion_series="BY",
+    fragment_max_cleavages=2,
 )
 ```
 
-### Run Programmatically (Parallel Files)
+## Quick Start: Multiple Files
+
+On Windows, keep the `if __name__ == "__main__"` guard for multiprocessing.
 
 ```python
 import multiprocessing
 from glycanPRMQuant.parallelProcess import run_parallel_pipeline
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()  # important on Windows
+    multiprocessing.freeze_support()
     run_parallel_pipeline(
         input_files=[
             r"path\to\file1.mzML",
             r"path\to\file2.mzML",
-            r"path\to\file3.mzML",
         ],
         output_root=r"path\to\results",
         n_workers=4,
+        ppm_ms1_tol=10,
+        ppm_ms2_tol=10,
+        mz_tol=0.02,
+        fragment_ion_series="ABCXYZ",
+        fragment_max_cleavages=2,
     )
 ```
 
-## Typical Outputs
+## Custom Databases
 
-Per sample:
+By default, both MS1 and MS2 use the bundled `database/N_glycan_db.csv`.
 
-- `ms1_results.csv`
-- `ms2_<glycan>.csv`
-- `<sample>_auc_values.csv` (glycan-level total AUC)
-- `<sample>_auc_values_by_adduct.csv` (per-adduct AUC)
-- `images/*.pdf` chromatograms and spectra
+You can override the database paths:
 
-Multi-sample:
+```python
+process_mzml_pipeline(
+    mzml_file="path/to/sample.mzML",
+    output_dir="path/to/output_dir",
+    precursor_db_path="path/to/N_glycan_db.csv",
+    structure_db_path="path/to/N_glycan_db.csv",
+)
+```
 
-- `combined_auc_values.csv` (written after parallel runs with multiple files)
+The N-glycan structure database should include:
+
+- `Condensed IUPAC`
+- `Composition`
+- `Numerical Composition`
+
+`matchMS1` groups by `Composition` and calculates mass once per composition.
+`matchMS2` groups by `Numerical Composition` and fragments each candidate IUPAC
+structure for that composition.
+
+## Matching Details
+
+### MS1
+
+`matchMS1` calculates neutral masses from the first parsable IUPAC structure for
+each unique `Composition`, then generates precursor adduct m/z values:
+
+- `2H`
+- `3H`
+- `4H`
+- `H+NH4`
+- `2NH4`
+
+The output includes:
+
+- `precursor_mz`
+- `Glycan` using the numerical composition ID when available
+- `Adduct`
+- `database_mz`
+- `ppm_error`
+
+### MS2
+
+`matchMS2` uses the matched numerical composition to find all candidate IUPAC
+structures, generates theoretical fragments, and matches observed fragments by
+m/z tolerance. It scores candidate structures by:
+
+1. Total matched fragment count
+2. Unique matched fragment count
+3. Total matched fragment intensity
+4. Mean absolute ppm error
+
+The returned rows are restricted to the selected best-scoring IUPAC and include:
+
+- `Glycan`
+- `NumericalComposition`
+- `Composition`
+- `IUPAC`
+- `Fragment`
+- `FragmentType`
+- `fragment_mz`
+- `fragment_intensity`
+- `Charge`
+- `Adduct`
+- `IUPAC_match_count`
+- `IUPAC_unique_fragments`
+- `IUPAC_total_intensity`
+
+## Important Parameters
+
+- `ppm_ms1_tol`: precursor matching tolerance in ppm.
+- `mz_min`, `mz_max`: precursor m/z search range.
+- `mz_offset`: offset applied to calculated precursor adduct m/z values.
+- `mass_offset`: offset applied to neutral masses before precursor adduct
+  calculation.
+- `intensity_threshold`: minimum MS2 fragment intensity used during extraction
+  and matching.
+- `ppm_ms2_tol`: tolerance used to associate MS2 scans with matched precursors.
+- `mz_tol`: fragment m/z tolerance in Da.
+- `fragment_ion_series`: allowed theoretical fragment ion series. Use any
+  combination of `A`, `B`, `C`, `X`, `Y`, `Z`.
+- `fragment_max_cleavages`: maximum number of cleavages during theoretical
+  fragmentation.
+- `smoothing_window`: smoothing strength/window for chromatograms and AUC.
+- `smoothing_method`: `gaussian` or `savgol`.
+- `rel_height`: AUC boundary relative height.
+- `rel_height_mode`: `prominence` or `height`.
+- `skyline_transition`: write a Skyline transition list when `True`.
+
+## Outputs
+
+Each sample output directory can include:
+
+- `ms1_results.csv`  
+  Matched precursor assignments.
+- `ms2_<glycan>.csv`  
+  Matched MS2 rows for a numerical glycan composition, including selected IUPAC
+  structure information.
+- `<sample>_auc_values.csv`  
+  Glycan-level total AUC.
+- `<sample>_auc_values_by_adduct.csv`  
+  Per-adduct AUC values.
+- `<sample>_skyline_transitions.xlsx`  
+  Optional Skyline transition export.
+- `images/*.pdf`  
+  Fragment chromatograms, precursor-adduct chromatograms, total chromatograms,
+  shaded AUC plots, and averaged MS2 spectra.
+
+For multi-file runs:
+
+- `combined_auc_values.csv` is written at the output root when more than one
+  file is processed.
+
+## Notes For Packaging
+
+Default database paths are resolved through `glycanPRMQuant.resources`, which
+supports both source-tree execution and PyInstaller-style bundled resources.
+When building an executable, include the `database/` directory as bundled data.
 
 ## Data Availability
 
-The sample data used for development and benchmarking is available via MassIVE: [MSV000101208]  
-The package is also archived on Zenodo: [![DOI](https://zenodo.org/badge/945763571.svg)](https://doi.org/10.5281/zenodo.19189798)
+Development and benchmarking data are available through MassIVE: `MSV000101208`.
+
+The package is archived on Zenodo:
+[![DOI](https://zenodo.org/badge/945763571.svg)](https://doi.org/10.5281/zenodo.19189798)
 
 ## License
 
