@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import scienceplots                                       # noqa: F401
 
 # --------------------------------------------------------------------------
-#  IMPORT YOUR OWN ANALYTICAL ROUTINES
+#  IMPORT  ANALYTICAL ROUTINES
 # --------------------------------------------------------------------------
 from glycanPRMQuant.glycanClassification import classifyGlycan        # noqa: F401
 from glycanPRMQuant.glycantypeBarplot import plot_barplot, plot_type_barplot             # noqa: F401
