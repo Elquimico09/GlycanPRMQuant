@@ -1,12 +1,25 @@
 import os
-import sys
 import logging
+from contextlib import redirect_stderr, redirect_stdout
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from contextlib import redirect_stdout, redirect_stderr
 from glycanPRMQuant.consolidateAUC import consolidate_auc_results
 from glycanPRMQuant.logging_utils import configure_logging
 
 logger = logging.getLogger(__name__)
+
+
+class QueueWriter:
+    """File-like writer that forwards stdout/stderr text to the GUI log queue."""
+
+    def __init__(self, queue):
+        self.queue = queue
+
+    def write(self, data):
+        if data:
+            self.queue.put(data)
+
+    def flush(self):
+        pass
 
 def _process_one_file(
     mzml_path: str,
@@ -32,7 +45,8 @@ def _process_one_file(
     skyline_transition: bool = False,
     enable_smoothing: bool = True,
     precursor_db_path: str = None,
-    structure_db_path: str = None
+    structure_db_path: str = None,
+    log_queue=None
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -49,36 +63,46 @@ def _process_one_file(
     os.makedirs(out_dir, exist_ok=True)
 
     if dry_run:
+        if log_queue is not None:
+            configure_logging(log_queue=log_queue, force=True)
         return base, 'dry-run', None
 
     try:
-        configure_logging()
+        configure_logging(log_queue=log_queue, force=log_queue is not None)
         from glycanPRMQuant.processmzML import process_mzml_pipeline
 
-        process_mzml_pipeline(
-            mzml_file=mzml_path,
-            output_dir=out_dir,
-            ppm_ms1_tol=ppm_ms1_tol,
-            mz_min=mz_min,
-            mz_max=mz_max,
-            intensity_threshold=intensity_threshold,
-            ppm_ms2_tol=ppm_ms2_tol,
-            mz_tol=mz_tol,
-            fragment_ion_series=fragment_ion_series,
-            fragment_max_cleavages=fragment_max_cleavages,
-            smoothing_window=smoothing_window,
-            smoothing_method=smoothing_method,
-            mz_offset=mz_offset,
-            mass_offset=mass_offset,
-            enable_adduct_plots=enable_adduct_plots,
-            enable_total_plots=enable_total_plots,
-            rel_height=rel_height,
-            rel_height_mode=rel_height_mode,
-            skyline_transition=skyline_transition,
-            enable_smoothing=enable_smoothing,
-            precursor_db_path=precursor_db_path,
-            structure_db_path=structure_db_path
-        )
+        def _run_pipeline():
+            process_mzml_pipeline(
+                mzml_file=mzml_path,
+                output_dir=out_dir,
+                ppm_ms1_tol=ppm_ms1_tol,
+                mz_min=mz_min,
+                mz_max=mz_max,
+                intensity_threshold=intensity_threshold,
+                ppm_ms2_tol=ppm_ms2_tol,
+                mz_tol=mz_tol,
+                fragment_ion_series=fragment_ion_series,
+                fragment_max_cleavages=fragment_max_cleavages,
+                smoothing_window=smoothing_window,
+                smoothing_method=smoothing_method,
+                mz_offset=mz_offset,
+                mass_offset=mass_offset,
+                enable_adduct_plots=enable_adduct_plots,
+                enable_total_plots=enable_total_plots,
+                rel_height=rel_height,
+                rel_height_mode=rel_height_mode,
+                skyline_transition=skyline_transition,
+                enable_smoothing=enable_smoothing,
+                precursor_db_path=precursor_db_path,
+                structure_db_path=structure_db_path
+            )
+
+        if log_queue is None:
+            _run_pipeline()
+        else:
+            writer = QueueWriter(log_queue)
+            with redirect_stdout(writer), redirect_stderr(writer):
+                _run_pipeline()
         return base, 'done', None
     except Exception as e:
         return base, 'error', str(e)
@@ -171,7 +195,8 @@ def run_parallel_pipeline(
                     skyline_transition,
                     enable_smoothing,
                     precursor_db_path,
-                    structure_db_path
+                    structure_db_path,
+                    log_queue
                 ): path for path in mzml_files
             }
             for fut in as_completed(futures):
@@ -193,16 +218,8 @@ def run_parallel_pipeline(
         configure_logging()
         _run()
     else:
-        class QueueWriter:
-            def __init__(self, q): self.q = q
-            def write(self, data):
-                if data: self.q.put(data)
-            def flush(self): pass
-        writer = QueueWriter(log_queue)
-        with redirect_stdout(writer), redirect_stderr(writer):
-            configure_logging(force=True)
-            _run()
-        log_queue.put(None)  # sentinel
+        configure_logging(log_queue=log_queue, force=True)
+        _run()
 
     # After processing, write combined AUC summary if applicable
     if (not dry_run) and len(mzml_files) > 1:
@@ -212,3 +229,6 @@ def run_parallel_pipeline(
             logger.info("[✓] Wrote combined AUC table to %s", combined_path)
         except Exception as e:
             logger.error("[✗] Failed to write combined AUC table: %s", e)
+
+    if log_queue is not None:
+        log_queue.put(None)  # sentinel

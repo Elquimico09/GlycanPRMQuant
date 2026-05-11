@@ -1,21 +1,18 @@
-import multiprocessing
+import logging
+
+import pytest
+
 from glycanPRMQuant.parallelProcess import run_parallel_pipeline
 
-if __name__ == '__main__':
-    # On Windows, this is required for any multiprocessing spawn
-    multiprocessing.freeze_support()
 
-    run_parallel_pipeline(
-        input_dir="sample_data/Fetuin",
-        output_root="sample_data/Fetuin/Processed",
-        n_workers=4,
-        ppm_ms1_tol=20,
-        mz_min=400,
-        mz_max=2000,
-        intensity_threshold=1e2,
-        ppm_ms2_tol=20,
-        mz_tol=0.05,        
-        smoothing_window=11,
-        mass_offset=0,
-        mz_offset=0.0
-    )
+def test_run_parallel_pipeline_warns_when_no_mzml_files(tmp_path, caplog):
+    caplog.set_level(logging.WARNING)
+
+    run_parallel_pipeline(input_dir=str(tmp_path), output_root=str(tmp_path / "out"))
+
+    assert "No .mzML files found" in caplog.text
+
+
+def test_run_parallel_pipeline_requires_input_source(tmp_path):
+    with pytest.raises(ValueError, match="Either input_files or input_dir"):
+        run_parallel_pipeline(output_root=str(tmp_path / "out"))

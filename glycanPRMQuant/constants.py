@@ -13,4 +13,3 @@ NH4_MASS = 18.033826  # Ammonium adduct mass
 
 # Default file paths
 DEFAULT_PRECURSOR_DB = resource_path("database/N_glycan_db.csv")
-DEFAULT_FRAGMENT_DB = resource_path("database/fragment_database.csv")

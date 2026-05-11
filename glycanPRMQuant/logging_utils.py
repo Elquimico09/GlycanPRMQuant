@@ -4,17 +4,38 @@ import logging
 import sys
 
 
-def configure_logging(level: int = logging.INFO, force: bool = False) -> None:
+class QueueLogHandler(logging.Handler):
+    """Logging handler that writes formatted records to a multiprocessing queue."""
+
+    def __init__(self, queue):
+        super().__init__()
+        self.queue = queue
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self.queue.put(self.format(record) + "\n")
+        except Exception:
+            self.handleError(record)
+
+
+def configure_logging(level: int = logging.INFO, force: bool = False, log_queue=None) -> None:
     """Configure package logging with a concise console format."""
-    if force or not logging.getLogger().handlers:
-        logging.basicConfig(
-            level=level,
-            format="%(levelname)s: %(message)s",
-            stream=sys.stderr,
-            force=force,
-        )
+    root = logging.getLogger()
+    formatter = logging.Formatter("%(levelname)s: %(message)s")
+
+    if force or not root.handlers:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+
+        if log_queue is None:
+            handler = logging.StreamHandler(sys.stderr)
+        else:
+            handler = QueueLogHandler(log_queue)
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+        root.setLevel(level)
     else:
-        logging.getLogger().setLevel(level)
+        root.setLevel(level)
 
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)

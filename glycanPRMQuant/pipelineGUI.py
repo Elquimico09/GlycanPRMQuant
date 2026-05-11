@@ -16,10 +16,14 @@ class PipelineGUI(tk.Tk):
         self.geometry("980x1080")
         self.configure(bg="#0f172a")
         self.pipeline_proc = None
+        self.queue_manager = None
         self.log_queue = None
         self.progress_queue = None
         self.selected_files = []
         self._polling = False
+        self._process_done = False
+        self._log_done = False
+        self._progress_done = False
         self._prefs_path = os.path.join(os.getcwd(), ".pipeline_gui_prefs.json")
         self._init_style()
         self._build_widgets()
@@ -367,9 +371,13 @@ class PipelineGUI(tk.Tk):
         self.run_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
         self._clear_log()
-        self.log_queue = multiprocessing.Queue()
-        self.progress_queue = multiprocessing.Queue()
+        self.queue_manager = multiprocessing.Manager()
+        self.log_queue = self.queue_manager.Queue()
+        self.progress_queue = self.queue_manager.Queue()
         self._polling = True
+        self._process_done = False
+        self._log_done = False
+        self._progress_done = False
         self._init_counters(total=len(params["input_files"]))
 
         # launch pipeline in separate process with log queue
@@ -392,40 +400,65 @@ class PipelineGUI(tk.Tk):
     def _monitor_proc(self):
         if self.pipeline_proc:
             self.pipeline_proc.join()
-            self.after(0, self._finish_run)
+            self.after(0, self._mark_process_done)
+
+    def _mark_process_done(self):
+        self._process_done = True
+        self._poll_log()
 
     def _finish_run(self):
+        if not self._polling and self.pipeline_proc is None:
+            return
+        self._drain_queues()
         self.pipeline_proc = None
+        if self.queue_manager:
+            self.queue_manager.shutdown()
+            self.queue_manager = None
+        self.log_queue = None
+        self.progress_queue = None
         self.run_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
         self._polling = False
+        self._process_done = False
         self.status_var.set("Done")
         messagebox.showinfo("Done", "Pipeline run finished or stopped.")
 
     def _poll_log(self):
-        if not self.log_queue:
+        if not self._polling and self.pipeline_proc is None:
             return
-        try:
-            while True:
-                msg = self.log_queue.get_nowait()
-                if msg is None:
-                    return
-                self._append_log(msg)
-        except Exception:
-            pass
+        self._drain_queues()
+
+        if self._process_done:
+            exitcode = self.pipeline_proc.exitcode if self.pipeline_proc else 0
+            if self._log_done or exitcode not in (0, None):
+                self._finish_run()
+                return
+
+        if self._polling:
+            self.after(200, self._poll_log)
+
+    def _drain_queues(self):
+        if self.log_queue:
+            try:
+                while True:
+                    msg = self.log_queue.get_nowait()
+                    if msg is None:
+                        self._log_done = True
+                        break
+                    self._append_log(msg)
+            except Exception:
+                pass
 
         if self.progress_queue:
             try:
                 while True:
                     item = self.progress_queue.get_nowait()
                     if item is None:
+                        self._progress_done = True
                         break
                     self._update_progress(item)
             except Exception:
                 pass
-
-        if self._polling:
-            self.after(200, self._poll_log)
 
     def _append_log(self, msg):
         self.log_box.configure(state="normal")

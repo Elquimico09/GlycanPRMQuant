@@ -1,10 +1,13 @@
-from glycanPRMQuant.msfileReader import extractMS2
-import pandas as pd
-import numpy as np
-from pyteomics import mzml
-import os
+from pathlib import Path
 
-ms2_data = extractMS2("sample_data/mzML/AZ_0_5ug_R1.mzML", min_intensity=1e2)
-print(ms2_data.head())
-# print the total number of unique precursors
-print("Total number of unique precursors:", len(ms2_data['precursor_mz'].unique()))
+import pandas as pd
+
+from glycanPRMQuant.constants import DEFAULT_PRECURSOR_DB
+
+
+def test_default_precursor_database_is_packaged():
+    db_path = Path(DEFAULT_PRECURSOR_DB)
+
+    assert db_path.exists()
+    db = pd.read_csv(db_path, nrows=1)
+    assert {"Condensed IUPAC", "Composition", "Numerical Composition"}.issubset(db.columns)

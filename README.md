@@ -13,7 +13,7 @@ programmatically from Python.
 
 - Reads vendor-converted `.mzML` files with `pyteomics`.
 - Matches MS1 precursor m/z values against glycan compositions.
-- Calculates precursor neutral masses from `database/N_glycan_db.csv` using
+- Calculates precursor neutral masses from the bundled `N_glycan_db.csv` using
   `glypy`, grouped once per `Composition`.
 - Generates theoretical MS2 fragments from each candidate `Condensed IUPAC`
   structure for a matched numerical composition.
@@ -47,17 +47,15 @@ programmatically from Python.
   Peak picking, integration windows, smoothing, and AUC summarization.
 - `glycanPRMQuant/plotFragmentIntensity.py` and `plotMS2spectrum.py`  
   Chromatogram and spectrum plotting utilities.
-- `database/N_glycan_db.csv`  
+- `glycanPRMQuant/database/N_glycan_db.csv`  
   Default structure database with `Condensed IUPAC`, `Composition`, and
   `Numerical Composition` columns.
 
 ## Installation
 
-Clone the repository and install it in editable mode:
+Install from PyPI:
 
 ```bash
-git clone https://github.com/Elquimico09/GlycanPRMQuant.git
-cd GlycanPRMQuant
 python -m venv .venv
 ```
 
@@ -74,14 +72,40 @@ source .venv/bin/activate
 Install:
 
 ```bash
-pip install -e .
+python -m pip install --upgrade pip
+pip install glycanprmquant
+```
+
+Check the command-line entry point and bundled database:
+
+```bash
+glycan-prmquant --help
+python -c "from glycanPRMQuant.constants import DEFAULT_PRECURSOR_DB; import os; print(os.path.exists(DEFAULT_PRECURSOR_DB), DEFAULT_PRECURSOR_DB)"
 ```
 
 The package expects Python `>=3.12`.
 
+### Development Install
+
+For local development, clone the repository and install it in editable mode:
+
+```bash
+git clone https://github.com/Elquimico09/GlycanPRMQuant.git
+cd GlycanPRMQuant
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+On Windows, activate the environment with:
+
+```bash
+.venv\Scripts\activate
+```
+
 ## Dependencies
 
-Installed by `setup.py`:
+Installed from `pyproject.toml`:
 
 - `numpy`
 - `pandas`
@@ -100,6 +124,17 @@ External requirement:
 - Input data must be in `.mzML` format. Convert vendor files with ProteoWizard
   `msconvert` before running the pipeline.
 
+## Development Checks
+
+Install the development extra and run the tests:
+
+```bash
+pip install -e ".[dev]"
+python -m pytest
+python -m build
+python -m twine check dist/*
+```
+
 ## Quick Start: GUI
 
 Run:
@@ -113,7 +148,7 @@ In the GUI:
 1. Select one or more `.mzML` files.
 2. Select an output folder.
 3. Optionally provide custom precursor/structure DB files. Leave blank to use
-   the bundled `database/N_glycan_db.csv`.
+   the bundled `N_glycan_db.csv`.
 4. Set MS1/MS2 tolerances and intensity thresholds.
 5. Set fragment options:
    - `Fragment ion series`: any combination of `A`, `B`, `C`, `X`, `Y`, `Z`.
@@ -214,7 +249,7 @@ if __name__ == "__main__":
 
 ## Custom Databases
 
-By default, both MS1 and MS2 use the bundled `database/N_glycan_db.csv`.
+By default, both MS1 and MS2 use the bundled `N_glycan_db.csv`.
 
 You can override the database paths:
 
@@ -334,7 +369,7 @@ For multi-file runs:
 
 Default database paths are resolved through `glycanPRMQuant.resources`, which
 supports both source-tree execution and PyInstaller-style bundled resources.
-When building an executable, include the `database/` directory as bundled data.
+When building an executable, include `glycanPRMQuant/database/` as bundled data.
 
 ## Data Availability
 

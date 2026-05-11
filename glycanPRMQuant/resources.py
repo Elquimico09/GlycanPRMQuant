@@ -21,6 +21,11 @@ def resource_path(relative_path: str) -> str:
         if candidate.exists():
             return str(candidate)
 
+    package_root = Path(__file__).resolve().parent
+    candidate = package_root / rel
+    if candidate.exists():
+        return str(candidate)
+
     repo_root = Path(__file__).resolve().parent.parent
     candidate = repo_root / rel
     if candidate.exists():

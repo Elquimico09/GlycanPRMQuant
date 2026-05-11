@@ -213,9 +213,12 @@ def calculateAUC(
         end_rt   = np.interp(right_ip, idxs, x)
         peak_rt  = x[main_idx]
 
-        # integrate using np.trapezoid
-        mask = (x >= start_rt) & (x <= end_rt)
-        auc = np.trapezoid(y_smooth[mask], x[mask])
+        # Integrate with interpolated boundary points so narrow windows that
+        # fall between scans do not collapse to a single apex sample.
+        interior_mask = (x > start_rt) & (x < end_rt)
+        x_auc = np.concatenate(([start_rt], x[interior_mask], [end_rt]))
+        y_auc = np.interp(x_auc, x, y_smooth)
+        auc = np.trapezoid(y_auc, x_auc)
 
         logger.info(
             f"Glycan {glycan!r}: peak RT={peak_rt:.2f}, "

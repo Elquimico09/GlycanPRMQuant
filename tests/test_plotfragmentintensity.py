@@ -1,14 +1,27 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments
-from glycanPRMQuant.plotMS2spectrum import plotMS2spectrum
-file_path = "C:\\Users\\Vishal\\Documents\\Pompe_PRM\\Pompe\\Processed\\Pompe_1_1_10252024\\ms2_44211.csv"
-svg_path = file_path.replace(".csv", ".svg")
-svg_path_2 = file_path.replace(".csv", "_ms2spectrum.svg")
-plot_ms2_fragments(file_path, window = 20, top_n=5, save_path=svg_path,
-                   figsize=(7, 3))
-avg_df = plotMS2spectrum(file_path=file_path, window_minutes=2,
-                         top_n=15,
-                         save_path=svg_path_2,
-                         figsize=(10, 5))
+
+import pandas as pd
+
+
+def test_plot_ms2_fragments_writes_plot(tmp_path):
+    csv_path = tmp_path / "ms2.csv"
+    output_svg = tmp_path / "fragments.svg"
+    pd.DataFrame(
+        {
+            "scan_number": [1, 2, 1, 2],
+            "rt": [1.0, 2.0, 1.0, 2.0],
+            "Fragment": ["B1", "B1", "Y1", "Y1"],
+            "fragment_mz": [100.0, 100.1, 200.0, 200.1],
+            "fragment_intensity": [50.0, 60.0, 100.0, 120.0],
+        }
+    ).to_csv(csv_path, index=False)
+
+    plot_ms2_fragments(
+        str(csv_path),
+        window=0,
+        top_n=2,
+        save_path=str(output_svg),
+        figsize=(4, 3),
+    )
+
+    assert output_svg.exists()

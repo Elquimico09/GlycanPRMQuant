@@ -1,46 +1,27 @@
-from glycanPRMQuant.calculateAUC import calculateAUC
-
-## Write a loop to iterate over all CSV files in the directory
-## and calculate AUC for each file
-import os
-import glob
 import pandas as pd
-import matplotlib.pyplot as plt
+
 from glycanPRMQuant.calculateAUC import calculateAUC
-# # Define the directory containing the CSV files
-# directory = "sample_data/results_parallel/AZ_2ug_R3/"
-# # Get a list of all CSV files in the directory
-# csv_files = glob.glob(os.path.join(directory, "*.csv"))
-# # remove any files that are not MS2 files
-# csv_files = [f for f in csv_files if "ms2" in f]
-# # Loop through each CSV file and calculate AUC
-# for csv_file in csv_files:
-#     # Define the save path for the AUC plot
-#     save_path = csv_file.replace(".csv", "_AUC.svg")
-#     # Calculate AUC and save the plot
-#     auc = calculateAUC(csv_file,
-#         glycan_col='Glycan',
-#         rt_col='rt',
-#         intensity_col='fragment_intensity',
-#         scan_col='scan_number',
-#         rel_height=0.9,
-#         smoothing_window=11,
-#         plot=True,
-#         save_path=save_path
-#     )
-#     print(f"AUC for {csv_file}: {auc}")
 
 
+def test_calculate_auc_returns_per_adduct_and_total_tables():
+    df = pd.DataFrame(
+        {
+            "Glycan": ["25000"] * 10,
+            "Adduct": ["2H"] * 5 + ["3H"] * 5,
+            "scan_number": [1, 2, 3, 4, 5] * 2,
+            "rt": [0.0, 1.0, 2.0, 3.0, 4.0] * 2,
+            "fragment_intensity": [0.0, 10.0, 100.0, 10.0, 0.0, 0.0, 5.0, 50.0, 5.0, 0.0],
+        }
+    )
 
-csv_file = "C:\\Users\\Vishal\\Documents\\Pompe_PRM\\Pompe\\Processed\\Pompe_5_1_10252024\\ms2_53211.csv"
-save_path = csv_file.replace(".csv", "_AUC.svg")
-auc = calculateAUC(csv_file,
-    glycan_col='Glycan',
-    rt_col='rt',
-    intensity_col='fragment_intensity',
-    scan_col='scan_number',
-    rel_height=0.5,
-    smoothing_window=5,
-    plot=True,
-    save_path=save_path,
-    window = 2)
+    per_adduct, total = calculateAUC(
+        df,
+        rel_height=0.5,
+        rel_height_mode="height",
+        smoothing_window=0,
+        plot=False,
+    )
+
+    assert set(per_adduct["Adduct"]) == {"2H", "3H"}
+    assert total.loc[0, "Glycan"] == "25000"
+    assert total.loc[0, "AUC"] > 0
