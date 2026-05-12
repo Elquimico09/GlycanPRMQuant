@@ -388,7 +388,7 @@ When building an executable, include `glycanPRMQuant/database/` as bundled data.
 Development and benchmarking data are available through MassIVE: `MSV000101208`.
 
 The package is archived on Zenodo:
-[![DOI](https://zenodo.org/badge/945763571.svg)](https://doi.org/10.5281/zenodo.19189798)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19189798-blue)](https://doi.org/10.5281/zenodo.19189798)
 
 ## To-Do List / Work in Progress
 
