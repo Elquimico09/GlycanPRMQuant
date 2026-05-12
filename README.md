@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="GPQ%20Logo.png" alt="glycanPRMQuant logo" width="280">
+</p>
+
 # glycanPRMQuant
 
 `glycanPRMQuant` is a Python package for targeted PRM glycomics analysis from
