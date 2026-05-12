@@ -397,6 +397,15 @@ The package is archived on Zenodo:
 - [ ] Test the module with native glycans in negative mode, database already supports usage but needs to be validated.
 - [ ] Support for Isomeric Analysis using PGC/MGC.
 
+## Contact
+
+For issues regarding this package, bug reports, feature requests, or questions
+about usage, please contact:
+
+- Vishal Sandilya
+- Email: [vis.sandilya@gmail.com](mailto:vis.sandilya@gmail.com)
+- ORCID: [0009-0006-5834-7404](https://orcid.org/0009-0006-5834-7404)
+
 ## License
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
