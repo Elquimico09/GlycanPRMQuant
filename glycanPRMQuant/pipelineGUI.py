@@ -2,6 +2,7 @@ import multiprocessing
 import threading
 import os
 import json
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import scrolledtext
@@ -24,6 +25,9 @@ class PipelineGUI(tk.Tk):
         self._process_done = False
         self._log_done = False
         self._progress_done = False
+        self._run_started_at = None
+        self._run_requested_files = 0
+        self._summary_written = False
         self._prefs_path = os.path.join(os.getcwd(), ".pipeline_gui_prefs.json")
         self._init_style()
         self._build_widgets()
@@ -378,6 +382,9 @@ class PipelineGUI(tk.Tk):
         self._process_done = False
         self._log_done = False
         self._progress_done = False
+        self._run_started_at = time.monotonic()
+        self._run_requested_files = len(params["input_files"])
+        self._summary_written = False
         self._init_counters(total=len(params["input_files"]))
 
         # launch pipeline in separate process with log queue
@@ -410,6 +417,7 @@ class PipelineGUI(tk.Tk):
         if not self._polling and self.pipeline_proc is None:
             return
         self._drain_queues()
+        self._append_completion_summary()
         self.pipeline_proc = None
         if self.queue_manager:
             self.queue_manager.shutdown()
@@ -471,11 +479,34 @@ class PipelineGUI(tk.Tk):
         self.log_box.delete("1.0", "end")
         self.log_box.configure(state="disabled")
 
+    def _format_duration(self, seconds: float) -> str:
+        total_seconds = max(int(round(seconds)), 0)
+        minutes, seconds = divmod(total_seconds, 60)
+        return f"{minutes} minutes {seconds} seconds"
+
+    def _append_completion_summary(self):
+        if self._summary_written or self._run_started_at is None:
+            return
+        elapsed = time.monotonic() - self._run_started_at
+        processed = (
+            self._progress_done
+            + self._progress_skipped
+            + self._progress_error
+            + self._progress_dryrun
+        )
+        total = self._run_requested_files or self._progress_total
+        selected_note = "" if processed == total else f" ({total} selected)"
+        self._append_log(
+            f"Processed {processed} files in {self._format_duration(elapsed)}{selected_note}.\n"
+        )
+        self._summary_written = True
+
     def _init_counters(self, total: int):
         self._progress_total = max(int(total), 1)
         self._progress_done = 0
         self._progress_skipped = 0
         self._progress_error = 0
+        self._progress_dryrun = 0
         self.progress["value"] = 0
 
     def _update_progress(self, item):
@@ -486,12 +517,18 @@ class PipelineGUI(tk.Tk):
             self._progress_skipped += 1
         elif status == "error":
             self._progress_error += 1
+        elif status == "dry-run":
+            self._progress_dryrun += 1
         self.progress["value"] = 100.0 * (
-            self._progress_done + self._progress_skipped + self._progress_error
+            self._progress_done
+            + self._progress_skipped
+            + self._progress_error
+            + self._progress_dryrun
         ) / self._progress_total
         self.status_var.set(
             f"Done={self._progress_done}, Skipped={self._progress_skipped}, "
-            f"Errors={self._progress_error}, Total={self._progress_total}"
+            f"Dry-run={self._progress_dryrun}, Errors={self._progress_error}, "
+            f"Total={self._progress_total}"
         )
 
     def _open_output(self):

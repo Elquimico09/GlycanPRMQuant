@@ -118,6 +118,7 @@ Installed from `pyproject.toml`:
 - `scienceplots`
 - `pyteomics`
 - `glypy`
+- `lxml`
 
 External requirement:
 

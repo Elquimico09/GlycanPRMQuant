@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "glycanPRMQuant"
-version = "0.1.0"
+version = "1.2.0"
 description = "Targeted PRM glycomics analysis from mzML data"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -32,6 +32,7 @@ dependencies = [
   "scienceplots",
   "pyteomics",
   "glypy",
+  "lxml",
 ]
 
 [project.optional-dependencies]
