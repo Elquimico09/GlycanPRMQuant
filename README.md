@@ -390,6 +390,13 @@ Development and benchmarking data are available through MassIVE: `MSV000101208`.
 The package is archived on Zenodo:
 [![DOI](https://zenodo.org/badge/945763571.svg)](https://doi.org/10.5281/zenodo.19189798)
 
+## To-Do List / Work in Progress
+
+- [ ] Finalize the visualization module allowing for gui-based visualization of quality-control data.
+- [ ] Test the module on permethylated O-glycans, database already supports usage with O-glycans.
+- [ ] Test the module with native glycans in negative mode, database already supports usage but needs to be validated.
+- [ ] Support for Isomeric Analysis using PGC/MGC.
+
 ## License
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
