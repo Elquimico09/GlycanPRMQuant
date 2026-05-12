@@ -5,7 +5,7 @@ This package provides tools for processing mass spectrometry data of glycans,
 including MS1/MS2 matching, fragmentation analysis, and quantification.
 """
 
-__version__ = "0.1.0"
+__version__ = "1.2.0"
 __author__ = "Vishal Sandilya"
 __email__ = "vishal.sandilya@ttu.edu"
 

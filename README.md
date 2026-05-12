@@ -4,6 +4,13 @@
 
 # glycanPRMQuant
 
+<p align="center">
+  <a href="https://pypi.org/project/glycanPRMQuant/"><img src="https://img.shields.io/pypi/v/glycanPRMQuant.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/glycanPRMQuant/"><img src="https://img.shields.io/pypi/pyversions/glycanPRMQuant.svg" alt="Python versions"></a>
+  <a href="https://github.com/Elquimico09/GlycanPRMQuant"><img src="https://img.shields.io/github/stars/Elquimico09/GlycanPRMQuant?style=social" alt="GitHub stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT license"></a>
+</p>
+
 `glycanPRMQuant` is a Python package for targeted PRM glycomics analysis from
 `.mzML` data. It extracts MS2 spectra, matches precursor ions to N-glycan
 compositions, generates theoretical fragments from IUPAC structures, resolves
