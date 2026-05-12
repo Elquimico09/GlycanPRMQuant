@@ -53,13 +53,13 @@ programmatically from Python.
 
 ## Installation
 
-Install from PyPI:
+(Optional) Create a new python environment:
 
 ```bash
 python -m venv .venv
 ```
 
-Activate the environment:
+(Optional) Activate the environment:
 
 ```bash
 # Windows
@@ -69,7 +69,7 @@ Activate the environment:
 source .venv/bin/activate
 ```
 
-Install:
+Install from PyPi:
 
 ```bash
 python -m pip install --upgrade pip
