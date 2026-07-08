@@ -13,6 +13,7 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 
 logger = logging.getLogger(__name__)
+ISOBARIC_RESOLUTION_PPM = 20.0
 
 def _smooth_signal(y, method: str, window: int):
     if not window or window <= 0:
@@ -184,15 +185,43 @@ def _compute_glycan_apex_rt(all_df: pd.DataFrame, smoothing_window: int, smoothi
         apex[glycan] = float(x[int(y.argmax())])
     return apex
 
-def _resolve_precursor_conflicts(all_df: pd.DataFrame) -> pd.DataFrame:
+def _assign_precursor_clusters(all_df: pd.DataFrame, ppm_tol: float = ISOBARIC_RESOLUTION_PPM) -> pd.Series:
+    """Cluster precursor m/z values within a ppm window for conflict resolution."""
+    precursors = pd.to_numeric(all_df['precursor_mz'], errors='coerce')
+    unique_mzs = np.sort(precursors.dropna().unique())
+    cluster_by_mz = {}
+    cluster_id = -1
+    anchor_mz = None
+
+    for mz in unique_mzs:
+        if anchor_mz is None or abs(mz - anchor_mz) > anchor_mz * ppm_tol / 1e6:
+            cluster_id += 1
+            anchor_mz = mz
+        cluster_by_mz[mz] = cluster_id
+
+    clusters = precursors.map(cluster_by_mz)
+    if clusters.isna().any():
+        next_id = cluster_id + 1
+        for idx in clusters[clusters.isna()].index:
+            clusters.loc[idx] = next_id
+            next_id += 1
+    return clusters.astype(int)
+
+
+def _resolve_precursor_conflicts(
+    all_df: pd.DataFrame,
+    ppm_tol: float = ISOBARIC_RESOLUTION_PPM
+) -> pd.DataFrame:
     """
-    For identical precursor_mz values that map to multiple glycans, keep the glycan
-    with the most fragment matches and (tie-breaker) highest total fragment intensity.
+    For precursor m/z clusters that map to multiple glycans, keep the glycan with
+    the most fragment matches and (tie-breaker) highest total fragment intensity.
     """
     if all_df.empty:
         return all_df
+    work = all_df.copy()
+    work['_precursor_cluster'] = _assign_precursor_clusters(work, ppm_tol=ppm_tol)
     scores = (
-        all_df.groupby(['precursor_mz', 'Glycan'])
+        work.groupby(['_precursor_cluster', 'Glycan'])
               .agg(
                   frag_count=('fragment_mz', 'size'),
                   total_intensity=('fragment_intensity', 'sum')
@@ -200,12 +229,66 @@ def _resolve_precursor_conflicts(all_df: pd.DataFrame) -> pd.DataFrame:
               .reset_index()
     )
     scores = scores.sort_values(
-        ['precursor_mz', 'frag_count', 'total_intensity'],
+        ['_precursor_cluster', 'frag_count', 'total_intensity'],
         ascending=[True, False, False]
     )
-    winners = scores.drop_duplicates(subset=['precursor_mz'], keep='first')
-    winner_map = winners.set_index('precursor_mz')['Glycan'].to_dict()
-    return all_df[all_df['Glycan'] == all_df['precursor_mz'].map(winner_map)]
+    winners = scores.drop_duplicates(subset=['_precursor_cluster'], keep='first')
+    winner_map = winners.set_index('_precursor_cluster')['Glycan'].to_dict()
+    keep = work['Glycan'] == work['_precursor_cluster'].map(winner_map)
+    return all_df.loc[keep].copy()
+
+
+def _count_precursor_conflicts(
+    all_df: pd.DataFrame,
+    ppm_tol: float = ISOBARIC_RESOLUTION_PPM
+) -> int:
+    """Return the number of precursor m/z clusters assigned to multiple glycans."""
+    if all_df.empty:
+        return 0
+    work = all_df.copy()
+    work['_precursor_cluster'] = _assign_precursor_clusters(work, ppm_tol=ppm_tol)
+    return int(
+        work.groupby('_precursor_cluster')['Glycan']
+            .nunique()
+            .gt(1)
+            .sum()
+    )
+
+
+def _filter_ms1_to_resolved_assignments(
+    ms1_results: pd.DataFrame,
+    resolved_ms2: pd.DataFrame,
+    ppm_tol: float = ISOBARIC_RESOLUTION_PPM
+) -> pd.DataFrame:
+    """Keep MS1 rows whose precursor cluster and glycan survived MS2 resolution."""
+    if ms1_results.empty or resolved_ms2.empty:
+        return ms1_results.iloc[0:0].copy()
+
+    ms1_work = ms1_results.copy()
+    ms2_work = resolved_ms2.copy()
+    combined = pd.concat(
+        [
+            ms1_work[['precursor_mz']].assign(_source='ms1'),
+            ms2_work[['precursor_mz']].assign(_source='ms2'),
+        ],
+        ignore_index=True
+    )
+    combined['_precursor_cluster'] = _assign_precursor_clusters(combined, ppm_tol=ppm_tol)
+    ms1_work['_precursor_cluster'] = combined.loc[combined['_source'] == 'ms1', '_precursor_cluster'].to_numpy()
+    ms2_work['_precursor_cluster'] = combined.loc[combined['_source'] == 'ms2', '_precursor_cluster'].to_numpy()
+    ms1_work['_glycan_norm'] = ms1_work['Glycan'].apply(_normalize_glycan)
+    ms2_work['_glycan_norm'] = ms2_work['Glycan'].apply(_normalize_glycan)
+
+    keep_pairs = set(
+        ms2_work[['_precursor_cluster', '_glycan_norm']]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    )
+    keep = [
+        (cluster, glycan) in keep_pairs
+        for cluster, glycan in zip(ms1_work['_precursor_cluster'], ms1_work['_glycan_norm'])
+    ]
+    return ms1_work.loc[keep, ms1_results.columns].copy()
 
 def process_mzml_pipeline(
     mzml_file: str,
@@ -231,12 +314,18 @@ def process_mzml_pipeline(
     fragment_ion_series: str = "ABCXYZ",
     fragment_max_cleavages: int = 2,
     precursor_db_path: str = None,
-    structure_db_path: str = None
+    structure_db_path: str = None,
+    resolve_isobaric_conflicts: bool = True
 ):
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
     os.makedirs(output_dir, exist_ok=True)
     images_dir = os.path.join(output_dir, 'images')
     os.makedirs(images_dir, exist_ok=True)
+    logger.info(
+        "Isobaric precursor conflict resolution: %s (%g ppm)",
+        "enabled" if resolve_isobaric_conflicts else "disabled",
+        ISOBARIC_RESOLUTION_PPM
+    )
 
     # 1) Extract MS2
     logger.info(f"Extracting MS2 data from {mzml_file}…")
@@ -315,7 +404,34 @@ def process_mzml_pipeline(
 
     # Resolve precursor conflicts across glycans
     all_df = pd.concat(all_matched, ignore_index=True)
-    all_df = _resolve_precursor_conflicts(all_df)
+    conflict_count = _count_precursor_conflicts(all_df, ppm_tol=ISOBARIC_RESOLUTION_PPM)
+    if resolve_isobaric_conflicts:
+        rows_before = len(all_df)
+        glycans_before = all_df['Glycan'].nunique()
+        all_df = _resolve_precursor_conflicts(all_df, ppm_tol=ISOBARIC_RESOLUTION_PPM)
+        logger.info(
+            "Resolved %d isobaric precursor conflict(s) within %g ppm: %d -> %d rows, %d -> %d glycans",
+            conflict_count,
+            ISOBARIC_RESOLUTION_PPM,
+            rows_before,
+            len(all_df),
+            glycans_before,
+            all_df['Glycan'].nunique()
+        )
+    else:
+        logger.info(
+            "Isobaric precursor conflict resolution disabled; preserving %d conflict(s) within %g ppm",
+            conflict_count,
+            ISOBARIC_RESOLUTION_PPM
+        )
+    ms1_resolved = _filter_ms1_to_resolved_assignments(
+        ms1_results,
+        all_df,
+        ppm_tol=ISOBARIC_RESOLUTION_PPM
+    )
+    ms1_resolved_out = os.path.join(output_dir, "ms1_results_resolved.csv")
+    ms1_resolved.to_csv(ms1_resolved_out, index=False)
+    logger.info(f"Wrote {len(ms1_resolved)} resolved MS1 matches to {ms1_resolved_out}")
 
     # 4) For each glycan after conflict resolution: save CSV, plot
     for glycan, sub in all_df.groupby('Glycan'):

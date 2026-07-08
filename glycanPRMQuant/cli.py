@@ -26,6 +26,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--precursor-db-path")
     parser.add_argument("--structure-db-path")
     parser.add_argument("--skyline-transition", action="store_true")
+    parser.add_argument("--disable-isobaric-resolution", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("-v", "--verbose", action="count", default=0)
 
@@ -61,6 +62,7 @@ def _run_one(args: argparse.Namespace) -> int:
         skyline_transition=args.skyline_transition,
         fragment_ion_series=args.fragment_ion_series,
         fragment_max_cleavages=args.fragment_max_cleavages,
+        resolve_isobaric_conflicts=not args.disable_isobaric_resolution,
         precursor_db_path=args.precursor_db_path,
         structure_db_path=args.structure_db_path,
     )
@@ -95,6 +97,7 @@ def _run_batch(args: argparse.Namespace) -> int:
         skyline_transition=args.skyline_transition,
         precursor_db_path=args.precursor_db_path,
         structure_db_path=args.structure_db_path,
+        resolve_isobaric_conflicts=not args.disable_isobaric_resolution,
         overwrite=args.overwrite,
         dry_run=args.dry_run,
     )

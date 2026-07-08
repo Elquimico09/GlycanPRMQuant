@@ -46,7 +46,8 @@ def _process_one_file(
     enable_smoothing: bool = True,
     precursor_db_path: str = None,
     structure_db_path: str = None,
-    log_queue=None
+    log_queue=None,
+    resolve_isobaric_conflicts: bool = True
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -93,6 +94,7 @@ def _process_one_file(
                 rel_height_mode=rel_height_mode,
                 skyline_transition=skyline_transition,
                 enable_smoothing=enable_smoothing,
+                resolve_isobaric_conflicts=resolve_isobaric_conflicts,
                 precursor_db_path=precursor_db_path,
                 structure_db_path=structure_db_path
             )
@@ -135,7 +137,8 @@ def run_parallel_pipeline(
     precursor_db_path: str = None,
     structure_db_path: str = None,
     log_queue=None,
-    progress_queue=None
+    progress_queue=None,
+    resolve_isobaric_conflicts: bool = True
 ):
     """
     Discover all .mzML files in `input_dir` (or use explicit list) and process them in parallel.
@@ -196,7 +199,8 @@ def run_parallel_pipeline(
                     enable_smoothing,
                     precursor_db_path,
                     structure_db_path,
-                    log_queue
+                    log_queue,
+                    resolve_isobaric_conflicts
                 ): path for path in mzml_files
             }
             for fut in as_completed(futures):

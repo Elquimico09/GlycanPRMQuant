@@ -212,6 +212,9 @@ Useful CLI flags:
   `N_glycan_db.csv`.
 - `--skyline-transition` writes Skyline transition lists.
 - `--disable-smoothing` disables chromatogram/AUC smoothing.
+- `--disable-isobaric-resolution` keeps all glycan assignments whose precursor
+  m/z values fall within the 20 ppm isobaric-resolution window instead of
+  selecting the assignment with stronger fragment evidence.
 - `--quiet` shows warnings/errors only.
 - `-v` and `-vv` increase logging verbosity.
 
@@ -359,6 +362,8 @@ Each sample output directory can include:
 
 - `ms1_results.csv`  
   Matched precursor assignments.
+- `ms1_results_resolved.csv`  
+  MS1 precursor assignments that survived MS2-based isobaric resolution.
 - `ms2_<glycan>.csv`  
   Matched MS2 rows for a numerical glycan composition, including selected IUPAC
   structure information.

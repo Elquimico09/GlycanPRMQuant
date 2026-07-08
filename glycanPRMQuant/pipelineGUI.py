@@ -227,6 +227,7 @@ class PipelineGUI(tk.Tk):
         self.total_plot_var = tk.BooleanVar(value=True)
         self.skyline_var = tk.BooleanVar(value=False)
         self.smoothing_var = tk.BooleanVar(value=True)
+        self.isobaric_resolution_var = tk.BooleanVar(value=True)
 
         ttk.Checkbutton(toggles_frame, text="Overwrite existing outputs", variable=self.overwrite_var) \
             .grid(column=0, row=1, columnspan=4, sticky="w", padx=8, pady=4)
@@ -240,6 +241,12 @@ class PipelineGUI(tk.Tk):
             .grid(column=0, row=5, columnspan=4, sticky="w", padx=8, pady=4)
         ttk.Checkbutton(toggles_frame, text="Enable smoothing", variable=self.smoothing_var) \
             .grid(column=0, row=6, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(
+            toggles_frame,
+            text="Resolve isobaric precursor conflicts",
+            variable=self.isobaric_resolution_var
+        ) \
+            .grid(column=0, row=7, columnspan=4, sticky="w", padx=8, pady=4)
         row += 1
 
         # Run and Stop buttons
@@ -340,6 +347,7 @@ class PipelineGUI(tk.Tk):
                 "enable_total_plots": bool(self.total_plot_var.get()),
                 "skyline_transition": bool(self.skyline_var.get()),
                 "enable_smoothing": bool(self.smoothing_var.get()),
+                "resolve_isobaric_conflicts": bool(self.isobaric_resolution_var.get()),
             }
         except ValueError as e:
             messagebox.showerror("Parameter error", f"Invalid number: {e}")
@@ -567,6 +575,7 @@ class PipelineGUI(tk.Tk):
             "enable_total_plots": self.total_plot_var.get(),
             "skyline_transition": self.skyline_var.get(),
             "enable_smoothing": self.smoothing_var.get(),
+            "resolve_isobaric_conflicts": self.isobaric_resolution_var.get(),
         }
         try:
             with open(self._prefs_path, "w", encoding="utf-8") as f:
@@ -619,6 +628,8 @@ class PipelineGUI(tk.Tk):
             self.skyline_var.set(prefs["skyline_transition"])
         if "enable_smoothing" in prefs:
             self.smoothing_var.set(prefs["enable_smoothing"])
+        if "resolve_isobaric_conflicts" in prefs:
+            self.isobaric_resolution_var.set(prefs["resolve_isobaric_conflicts"])
 
 
 if __name__ == "__main__":
