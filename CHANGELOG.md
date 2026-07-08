@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.1 - 2026-07-08
+
+- Added CLI and GUI controls to enable or disable MS2-based isobaric precursor conflict resolution.
+- Updated isobaric precursor conflict resolution to group precursor m/z values.
+- Added `ms1_results_resolved.csv`, which reports the MS1 precursor assignments that survive MS2-based isobaric resolution.
+- Added logging that reports whether isobaric resolution is enabled and how many precursor conflicts are resolved or preserved.
+- Documented the new `--disable-isobaric-resolution` CLI flag and resolved MS1 output.
+- Added focused tests for the CLI flag, 20 ppm precursor clustering, and resolved MS1 filtering.
+
 ## v1.2.0 - 2026-05-12
 
 - Published `glycanPRMQuant` on PyPI.
