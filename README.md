@@ -128,6 +128,7 @@ Installed from `pyproject.toml`:
 - `openpyxl`
 - `scienceplots`
 - `pyteomics`
+- `psims`
 - `glypy`
 - `lxml`
 
