@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "glycanPRMQuant"
 version = "1.2.1"
-description = "Targeted PRM glycomics analysis from mzML data"
+description = "Targeted PRM glycomics analysis from Thermo RAW and mzML data"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -21,6 +21,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
+  "alpharaw>=0.7",
   "numpy",
   "pandas",
   "scipy",

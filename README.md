@@ -12,7 +12,7 @@
 </p>
 
 `glycanPRMQuant` is a Python package for targeted PRM glycomics analysis from
-`.mzML` data. It extracts MS2 spectra, matches precursor ions to N-glycan
+Thermo `.raw` or `.mzML` data. It extracts MS2 spectra, matches precursor ions to N-glycan
 compositions, generates theoretical fragments from IUPAC structures, resolves
 likely structures, plots chromatograms/spectra, and quantifies glycan signal by
 AUC.
@@ -22,7 +22,8 @@ programmatically from Python.
 
 ## What It Does
 
-- Reads vendor-converted `.mzML` files with `pyteomics`.
+- Reads Thermo `.raw` files directly with `AlphaRaw`, or `.mzML` files with
+  `pyteomics`.
 - Matches MS1 precursor m/z values against glycan compositions.
 - Calculates precursor neutral masses from the bundled `N_glycan_db.csv` using
   `glypy`, grouped once per `Composition`.
@@ -41,6 +42,8 @@ programmatically from Python.
 - `glycanPRMQuant/processmzML.py`  
   Single-file end-to-end pipeline: extraction, MS1 matching, MS2 matching,
   plotting, AUC, and optional Skyline export.
+- `glycanPRMQuant/spectra.py` and `glycanPRMQuant/thermo_raw.py`
+  Input-format dispatch and direct Thermo RAW extraction through AlphaRaw.
 - `glycanPRMQuant/parallelProcess.py`  
   Parallel multi-file runner used by the GUI and programmatic batch workflows.
 - `glycanPRMQuant/pipelineGUI.py`  
@@ -118,6 +121,7 @@ On Windows, activate the environment with:
 
 Installed from `pyproject.toml`:
 
+- `alpharaw`
 - `numpy`
 - `pandas`
 - `scipy`
@@ -132,10 +136,10 @@ Installed from `pyproject.toml`:
 - `glypy`
 - `lxml`
 
-External requirement:
-
-- Input data must be in `.mzML` format. Convert vendor files with ProteoWizard
-  `msconvert` before running the pipeline.
+Thermo RAW files are read directly; no mzML conversion is performed. AlphaRaw
+initializes its .NET runtime only when a `.raw` file is read, so mzML-only runs
+continue to use Pyteomics without loading .NET. Convert unsupported vendor
+formats to `.mzML` with a tool such as ProteoWizard `msconvert`.
 
 ## Development Checks
 
@@ -158,7 +162,8 @@ glycan-prmquant gui
 
 In the GUI:
 
-1. Select one or more `.mzML` files.
+1. Select one or more Thermo `.raw` files or `.mzML` files. Do not mix formats
+   within one batch.
 2. Select an output folder.
 3. Optionally provide custom precursor/structure DB files. Leave blank to use
    the bundled `N_glycan_db.csv`.
@@ -181,7 +186,7 @@ python -m glycanPRMQuant.pipelineGUI
 Process one file:
 
 ```bash
-glycan-prmquant run path/to/sample.mzML path/to/output_dir \
+glycan-prmquant run path/to/sample.raw path/to/output_dir \
   --ppm-ms1-tol 10 \
   --ppm-ms2-tol 10 \
   --mz-tol 0.02 \
@@ -189,11 +194,11 @@ glycan-prmquant run path/to/sample.mzML path/to/output_dir \
   --fragment-max-cleavages 2
 ```
 
-Process a folder of `.mzML` files:
+Process a folder of Thermo `.raw` files:
 
 ```bash
 glycan-prmquant batch \
-  --input-dir path/to/mzml_folder \
+  --input-dir path/to/raw_folder \
   --output-root path/to/results \
   --workers 4
 ```
@@ -202,7 +207,7 @@ Process specific files:
 
 ```bash
 glycan-prmquant batch \
-  --input-files path/to/file1.mzML path/to/file2.mzML \
+  --input-files path/to/file1.raw path/to/file2.raw \
   --output-root path/to/results \
   --workers 2
 ```
@@ -225,7 +230,7 @@ Useful CLI flags:
 from glycanPRMQuant.processmzML import process_mzml_pipeline
 
 process_mzml_pipeline(
-    mzml_file="path/to/sample.mzML",
+    mzml_file="path/to/sample.raw",
     output_dir="path/to/output_dir",
     ppm_ms1_tol=10,
     mz_min=400,
@@ -250,8 +255,8 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
     run_parallel_pipeline(
         input_files=[
-            r"path\to\file1.mzML",
-            r"path\to\file2.mzML",
+            r"path\to\file1.raw",
+            r"path\to\file2.raw",
         ],
         output_root=r"path\to\results",
         n_workers=4,
@@ -271,7 +276,7 @@ You can override the database paths:
 
 ```python
 process_mzml_pipeline(
-    mzml_file="path/to/sample.mzML",
+    mzml_file="path/to/sample.raw",
     output_dir="path/to/output_dir",
     precursor_db_path="path/to/N_glycan_db.csv",
     structure_db_path="path/to/N_glycan_db.csv",
@@ -387,7 +392,19 @@ For multi-file runs:
 
 Default database paths are resolved through `glycanPRMQuant.resources`, which
 supports both source-tree execution and PyInstaller-style bundled resources.
-When building an executable, include `glycanPRMQuant/database/` as bundled data.
+The included `GlycanPRMQuant.spec` bundles the glycan database, AlphaRaw's
+Thermo assemblies, and the Python/.NET bridge needed for direct RAW access.
+
+On Windows, build the complete GUI application from the `defaultenv` Conda
+environment with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
+```
+
+The script produces a versioned ZIP and SHA-256 checksum under
+`.packaging/release/`. Distribute the ZIP as the GitHub Release asset because
+the executable depends on the adjacent files in its `onedir` bundle.
 
 ## Data Availability
 

@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox
 from tkinter import scrolledtext
 from tkinter import ttk
 from glycanPRMQuant.parallelProcess import run_parallel_pipeline
+from glycanPRMQuant.spectra import validate_input_file_types
 
 
 class PipelineGUI(tk.Tk):
@@ -124,7 +125,7 @@ class PipelineGUI(tk.Tk):
 
         # Input / Output
         io_frame = section("Input & Output")
-        tk.Label(io_frame, text="Input .mzML files:", bg=self._colors["panel"], fg=self._colors["text"]) \
+        tk.Label(io_frame, text="Input RAW or mzML files:", bg=self._colors["panel"], fg=self._colors["text"]) \
             .grid(column=0, row=1, sticky="w", padx=8, pady=6)
         self.files_label = tk.StringVar(value="No files selected")
         tk.Label(io_frame, textvariable=self.files_label, bg=self._colors["panel"], fg=self._colors["muted"],
@@ -289,7 +290,13 @@ class PipelineGUI(tk.Tk):
             .grid(column=3, row=1, padx=8, pady=6, sticky="e")
 
     def _choose_files(self):
-        files = filedialog.askopenfilenames(filetypes=[("mzML files", "*.mzML *.mzml")])
+        files = filedialog.askopenfilenames(
+            filetypes=[
+                ("Mass spectrometry files", "*.raw *.RAW *.mzML *.mzml"),
+                ("Thermo RAW files", "*.raw *.RAW"),
+                ("mzML files", "*.mzML *.mzml"),
+            ]
+        )
         if files:
             self.selected_files = list(files)
             count = len(self.selected_files)
@@ -356,7 +363,15 @@ class PipelineGUI(tk.Tk):
         # Basic validation
         missing = [f for f in params["input_files"] if not os.path.isfile(f)]
         if not params["input_files"] or missing:
-            messagebox.showerror("Input error", "No mzML files selected" if not params["input_files"] else f"Missing files: {missing[:3]}")
+            messagebox.showerror(
+                "Input error",
+                "No RAW or mzML files selected" if not params["input_files"] else f"Missing files: {missing[:3]}",
+            )
+            return
+        try:
+            validate_input_file_types(params["input_files"])
+        except ValueError as exc:
+            messagebox.showerror("Input error", str(exc))
             return
         if not os.path.isdir(params["output_root"]):
             messagebox.showerror("Output error", "Output directory does not exist")
@@ -633,5 +648,6 @@ class PipelineGUI(tk.Tk):
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     app = PipelineGUI()
     app.mainloop()

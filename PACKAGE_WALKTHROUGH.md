@@ -12,7 +12,7 @@ There are two major feature areas:
    - Match MS2 fragments against a fragment database
    - Plot chromatograms and spectra
    - Compute AUC values for each glycan
-   - Optionally batch process multiple mzML files in parallel
+   - Optionally batch process multiple Thermo RAW or mzML files in parallel
 
 2) **Glycan structure building and visualization**
    - Build glycan graphs from compositions under biosynthetic rules
@@ -34,6 +34,8 @@ There are two major feature areas:
 ### `glycanPRMQuant/msfileReader.py`
 
 Purpose: read mzML files and extract MS1, MS2, or XIC data into DataFrames.
+Thermo RAW MS2 extraction is handled separately by `thermo_raw.py` and selected
+by the extension-based dispatcher in `spectra.py`.
 
 Key functions:
 - `extractMS1(mzml_file, min_intensity=1)`
@@ -125,7 +127,8 @@ If you need a different peak selection strategy, modify the peak detection and w
 Purpose: orchestrate a full run for a single mzML file.
 
 Pipeline steps:
-1) Extract MS2 data via `extractMS2`.
+1) Extract MS2 data through `spectra.extract_ms2`, which dispatches to
+   Pyteomics for mzML or AlphaRaw for Thermo RAW.
 2) Match precursors in MS1 via `matchMS1`.
 3) For each glycan, match MS2 fragments via `matchMS2`.
 4) Resolve conflicts where a precursor m/z maps to multiple glycans.
@@ -138,7 +141,7 @@ If you want to change pipeline ordering, add new outputs, or skip steps, this is
 
 ### `glycanPRMQuant/parallelProcess.py`
 
-Purpose: run the pipeline on many mzML files in parallel.
+Purpose: run the pipeline on many Thermo RAW or mzML files in parallel.
 
 Main functions:
 - `_process_one_file(...)` runs `process_mzml_pipeline` on a single file and returns status.

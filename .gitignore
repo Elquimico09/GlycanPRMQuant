@@ -1,11 +1,87 @@
-sample_data/
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
 
-.DS_Store
-.pipeline_gui_prefs.json
+# Local environments and secrets
+.venv/
+venv/
+env/
+.conda/
+.env
+.env.*
+!.env.example
 
-*.egg-info/
+# Packaging and build output
 build/
 dist/
+.packaging/
+*.egg-info/
+.eggs/
+*.egg
+*.whl
+*.exe
+*.msi
+*.dll
+*.pyd
+*.so
+*.dylib
+*.pdb
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.sha256
+
+# Mass-spectrometry input and generated analysis output
+sample_data/
+*.raw
+*.RAW
+*.mzML
+*.mzml
+*.MZML
+*.hdf
+*.h5
+output/
+outputs/
+results/
+images/
+combined_auc_values.csv
+*_auc_values.csv
+*_auc_values_by_adduct.csv
+ms1_results.csv
+ms1_results_resolved.csv
+ms2_*.csv
+*_skyline_transitions.xlsx
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+~$*
+
+# Local application preferences
+.pipeline_gui_prefs.json
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Notebook and test runner state
+.ipynb_checkpoints/
+.tox/
+.nox/

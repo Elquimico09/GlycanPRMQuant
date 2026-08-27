@@ -4,6 +4,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from glycanPRMQuant.consolidateAUC import consolidate_auc_results
 from glycanPRMQuant.logging_utils import configure_logging
+from glycanPRMQuant.spectra import SUPPORTED_SUFFIXES, validate_input_file_types
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ def run_parallel_pipeline(
     resolve_isobaric_conflicts: bool = True
 ):
     """
-    Discover all .mzML files in `input_dir` (or use explicit list) and process them in parallel.
+    Discover all Thermo .raw or .mzML files in `input_dir` (or use an explicit list) and process them.
     Skips any sample whose AUC file already exists.
     """
     if output_root is None:
@@ -150,18 +151,20 @@ def run_parallel_pipeline(
     os.makedirs(output_root, exist_ok=True)
 
     if input_files:
-        mzml_files = list(input_files)
+        ms_files = list(input_files)
     else:
         if not input_dir:
             raise ValueError("Either input_files or input_dir must be provided")
-        mzml_files = [
+        ms_files = [
             os.path.join(input_dir, fn)
             for fn in os.listdir(input_dir)
-            if fn.lower().endswith('.mzml')
+            if os.path.splitext(fn)[1].lower() in SUPPORTED_SUFFIXES
         ]
-    if not mzml_files:
-        logger.warning("No .mzML files found")
+    if not ms_files:
+        logger.warning("No Thermo .raw or .mzML files found")
         return
+
+    validate_input_file_types(ms_files)
 
     # Clamp worker count to a safe upper bound for Windows (ProcessPool has a hard cap)
     if n_workers is None or n_workers <= 0:
@@ -201,7 +204,7 @@ def run_parallel_pipeline(
                     structure_db_path,
                     log_queue,
                     resolve_isobaric_conflicts
-                ): path for path in mzml_files
+                ): path for path in ms_files
             }
             for fut in as_completed(futures):
                 base, status, msg = fut.result()
@@ -226,7 +229,7 @@ def run_parallel_pipeline(
         _run()
 
     # After processing, write combined AUC summary if applicable
-    if (not dry_run) and len(mzml_files) > 1:
+    if (not dry_run) and len(ms_files) > 1:
         try:
             combined_path = os.path.join(output_root, "combined_auc_values.csv")
             consolidate_auc_results(output_root, combined_path)

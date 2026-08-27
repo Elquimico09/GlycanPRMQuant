@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 import numpy as np
 
-from glycanPRMQuant.msfileReader import extractMS2
+from glycanPRMQuant.spectra import extract_ms2
 from glycanPRMQuant.matchMS1     import matchMS1
 from glycanPRMQuant.matchMS2     import matchMS2
 from glycanPRMQuant.calculateAUC import calculateAUC
@@ -328,8 +328,8 @@ def process_mzml_pipeline(
     )
 
     # 1) Extract MS2
-    logger.info(f"Extracting MS2 data from {mzml_file}…")
-    ms2_data = extractMS2(mzml_file, min_intensity=intensity_threshold)
+    logger.info("Extracting MS2 data from %s", mzml_file)
+    ms2_data = extract_ms2(mzml_file, min_intensity=intensity_threshold)
     logger.info(f"Extracted {len(ms2_data)} points")
 
     # 2) Match MS1

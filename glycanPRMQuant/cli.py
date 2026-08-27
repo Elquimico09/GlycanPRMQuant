@@ -44,7 +44,7 @@ def _run_one(args: argparse.Namespace) -> int:
     from glycanPRMQuant.processmzML import process_mzml_pipeline
 
     process_mzml_pipeline(
-        mzml_file=args.mzml_file,
+        mzml_file=args.input_file,
         output_dir=args.output_dir,
         ppm_ms1_tol=args.ppm_ms1_tol,
         mz_min=args.mz_min,
@@ -117,13 +117,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="glycan-prmquant")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = sub.add_parser("run", help="Process one mzML file")
-    run_parser.add_argument("mzml_file")
+    run_parser = sub.add_parser("run", help="Process one Thermo RAW or mzML file")
+    run_parser.add_argument("input_file")
     run_parser.add_argument("output_dir")
     _add_common_options(run_parser)
     run_parser.set_defaults(func=_run_one)
 
-    batch_parser = sub.add_parser("batch", help="Process multiple mzML files")
+    batch_parser = sub.add_parser("batch", help="Process multiple Thermo RAW or mzML files")
     source = batch_parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--input-dir")
     source.add_argument("--input-files", nargs="+")
