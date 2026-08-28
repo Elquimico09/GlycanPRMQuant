@@ -297,9 +297,13 @@ def matchMS2(
         .astype(str)
         .apply(_normalize_glycan)
     )
+    precursor_columns = ['precursor_mz', 'Adduct']
+    for optional_column in ('database_mz', 'ppm_error'):
+        if optional_column in precursor_matched_data.columns:
+            precursor_columns.append(optional_column)
     prec_rows = precursor_matched_data[
         precursor_matched_data['Glycan'] == precursor_composition
-    ][['precursor_mz', 'Adduct']]
+    ][precursor_columns]
     if prec_rows.empty:
         logger.info(f"No MS1 precursor matches for {precursor_composition}")
         return pd.DataFrame()
@@ -312,14 +316,33 @@ def matchMS2(
         sel = ms2_extracted_data[
             ms2_extracted_data['precursor_mz'].between(p-tol, p+tol) &
             (ms2_extracted_data['fragment_intensity'] >= intensity_threshold)
-        ]
+        ].copy()
         if not sel.empty:
-            filt.append(sel.assign(Glycan=precursor_composition,
-                                   PrecursorAdduct=adduct_label))
+            if 'precursor_intensity' not in sel.columns:
+                sel['precursor_intensity'] = 0.0
+            sel['Glycan'] = precursor_composition
+            sel['PrecursorAdduct'] = adduct_label
+            sel['database_mz'] = row.get('database_mz', np.nan)
+            sel['precursor_ppm_error'] = row.get('ppm_error', np.nan)
+            sel['_precursor_assignment_error'] = abs(
+                float(row.get('ppm_error', np.inf))
+            )
+            filt.append(sel)
     if not filt:
         logger.info(f"No MS2 data after filtering for {precursor_composition}")
         return pd.DataFrame()
     ms2f = pd.concat(filt, ignore_index=True)
+    # A scan can satisfy more than one precursor-database row. Preserve only
+    # the closest precursor assignment before fragment clustering so repeated
+    # selection does not multiply the observed fragment intensity.
+    ms2f = (
+        ms2f.sort_values('_precursor_assignment_error')
+        .drop_duplicates(
+            subset=['scan_number', 'precursor_mz', 'fragment_mz'], keep='first'
+        )
+        .drop(columns='_precursor_assignment_error')
+        .reset_index(drop=True)
+    )
 
     # 4) cluster fragments within each spectrum
     ms2f = preprocess_ms2_data(ms2f, fragment_mass_tol=0.1)
@@ -329,7 +352,11 @@ def matchMS2(
     neighbors = tree.query_ball_point(obs_mzs.reshape(-1, 1), r=fragment_mass_tol)
 
     matched = []
-    base_cols = ['scan_number', 'rt', 'precursor_mz', 'fragment_intensity', 'Glycan', 'PrecursorAdduct']
+    base_cols = [
+        'scan_number', 'rt', 'precursor_mz', 'precursor_intensity',
+        'fragment_intensity', 'Glycan', 'PrecursorAdduct', 'database_mz',
+        'precursor_ppm_error'
+    ]
     base_data = ms2f[base_cols].to_dict('records')
 
     for i, nbrs in enumerate(neighbors):
@@ -352,6 +379,8 @@ def matchMS2(
                 'neutral_loss': hit['neutral_loss'],
                 'Charge': int(hit['Charge']),
                 'Fragment_mz': float(hit['Theo_mz']),
+                'observed_fragment_mz': float(obs_mzs[i]),
+                'theoretical_fragment_mz': float(hit['Theo_mz']),
                 'mz_diff': diff,
                 'ppm_error': float(diff / hit['Theo_mz'] * 1e6),
                 'Adduct': hit['Adduct'],

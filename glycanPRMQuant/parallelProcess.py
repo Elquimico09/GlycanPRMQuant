@@ -45,7 +45,12 @@ def _process_one_file(
     precursor_db_path: str = None,
     structure_db_path: str = None,
     log_queue=None,
-    resolve_isobaric_conflicts: bool = True
+    resolve_isobaric_conflicts: bool = True,
+    candidate_min_fragments: int = 2,
+    candidate_min_explained_intensity: float = 0.005,
+    candidate_min_score: float = 35.0,
+    candidate_min_evidence_difference: float = 4.0,
+    candidate_mass_outlier_min_delta: float = 2.0,
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -90,6 +95,11 @@ def _process_one_file(
                 skyline_transition=skyline_transition,
                 enable_smoothing=enable_smoothing,
                 resolve_isobaric_conflicts=resolve_isobaric_conflicts,
+                candidate_min_fragments=candidate_min_fragments,
+                candidate_min_explained_intensity=candidate_min_explained_intensity,
+                candidate_min_score=candidate_min_score,
+                candidate_min_evidence_difference=candidate_min_evidence_difference,
+                candidate_mass_outlier_min_delta=candidate_mass_outlier_min_delta,
                 precursor_db_path=precursor_db_path,
                 structure_db_path=structure_db_path
             )
@@ -130,7 +140,12 @@ def run_parallel_pipeline(
     structure_db_path: str = None,
     log_queue=None,
     progress_queue=None,
-    resolve_isobaric_conflicts: bool = True
+    resolve_isobaric_conflicts: bool = True,
+    candidate_min_fragments: int = 2,
+    candidate_min_explained_intensity: float = 0.005,
+    candidate_min_score: float = 35.0,
+    candidate_min_evidence_difference: float = 4.0,
+    candidate_mass_outlier_min_delta: float = 2.0,
 ):
     """
     Discover all Thermo .raw or .mzML files in `input_dir` (or use an explicit list) and process them.
@@ -191,7 +206,12 @@ def run_parallel_pipeline(
                     precursor_db_path,
                     structure_db_path,
                     log_queue,
-                    resolve_isobaric_conflicts
+                    resolve_isobaric_conflicts,
+                    candidate_min_fragments,
+                    candidate_min_explained_intensity,
+                    candidate_min_score,
+                    candidate_min_evidence_difference,
+                    candidate_mass_outlier_min_delta,
                 ): path for path in ms_files
             }
             for fut in as_completed(futures):

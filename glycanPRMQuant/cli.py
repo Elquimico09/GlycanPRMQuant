@@ -24,6 +24,11 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--structure-db-path")
     parser.add_argument("--skyline-transition", action="store_true")
     parser.add_argument("--disable-isobaric-resolution", action="store_true")
+    parser.add_argument("--candidate-min-fragments", type=int, default=2)
+    parser.add_argument("--candidate-min-explained-intensity", type=float, default=0.005)
+    parser.add_argument("--candidate-min-score", type=float, default=35.0)
+    parser.add_argument("--candidate-min-evidence-difference", type=float, default=4.0)
+    parser.add_argument("--candidate-mass-outlier-min-delta", type=float, default=2.0)
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("-v", "--verbose", action="count", default=0)
 
@@ -57,6 +62,11 @@ def _run_one(args: argparse.Namespace) -> int:
         fragment_ion_series=args.fragment_ion_series,
         fragment_max_cleavages=args.fragment_max_cleavages,
         resolve_isobaric_conflicts=not args.disable_isobaric_resolution,
+        candidate_min_fragments=args.candidate_min_fragments,
+        candidate_min_explained_intensity=args.candidate_min_explained_intensity,
+        candidate_min_score=args.candidate_min_score,
+        candidate_min_evidence_difference=args.candidate_min_evidence_difference,
+        candidate_mass_outlier_min_delta=args.candidate_mass_outlier_min_delta,
         precursor_db_path=args.precursor_db_path,
         structure_db_path=args.structure_db_path,
     )
@@ -89,6 +99,11 @@ def _run_batch(args: argparse.Namespace) -> int:
         precursor_db_path=args.precursor_db_path,
         structure_db_path=args.structure_db_path,
         resolve_isobaric_conflicts=not args.disable_isobaric_resolution,
+        candidate_min_fragments=args.candidate_min_fragments,
+        candidate_min_explained_intensity=args.candidate_min_explained_intensity,
+        candidate_min_score=args.candidate_min_score,
+        candidate_min_evidence_difference=args.candidate_min_evidence_difference,
+        candidate_mass_outlier_min_delta=args.candidate_mass_outlier_min_delta,
         overwrite=args.overwrite,
         dry_run=args.dry_run,
     )

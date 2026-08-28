@@ -7,6 +7,10 @@ from glycanPRMQuant.spectra import extract_ms2
 from glycanPRMQuant.matchMS1     import matchMS1
 from glycanPRMQuant.matchMS2     import matchMS2
 from glycanPRMQuant.calculateAUC import calculateAUC
+from glycanPRMQuant.candidate_scoring import (
+    CandidateScoringConfig,
+    score_and_resolve_candidates,
+)
 from glycanPRMQuant.plotFragmentIntensity import plot_ms2_fragments, plot_total_chromatogram_with_window
 from glycanPRMQuant.plotMS2spectrum   import plotMS2spectrum
 from scipy.ndimage import gaussian_filter1d
@@ -312,7 +316,12 @@ def process_mzml_pipeline(
     fragment_max_cleavages: int = 2,
     precursor_db_path: str = None,
     structure_db_path: str = None,
-    resolve_isobaric_conflicts: bool = True
+    resolve_isobaric_conflicts: bool = True,
+    candidate_min_fragments: int = 2,
+    candidate_min_explained_intensity: float = 0.005,
+    candidate_min_score: float = 35.0,
+    candidate_min_evidence_difference: float = 4.0,
+    candidate_mass_outlier_min_delta: float = 2.0,
 ):
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
     os.makedirs(output_dir, exist_ok=True)
@@ -397,28 +406,52 @@ def process_mzml_pipeline(
         logger.info("No MS2 matches; done.")
         return
 
-    # Resolve precursor conflicts across glycans
+    # Score and resolve precursor conflicts across glycans. Ambiguous and
+    # possibly coisolated candidates are retained rather than forcing a winner.
     all_df = pd.concat(all_matched, ignore_index=True)
     conflict_count = _count_precursor_conflicts(all_df, ppm_tol=ISOBARIC_RESOLUTION_PPM)
-    if resolve_isobaric_conflicts:
-        rows_before = len(all_df)
-        glycans_before = all_df['Glycan'].nunique()
-        all_df = _resolve_precursor_conflicts(all_df, ppm_tol=ISOBARIC_RESOLUTION_PPM)
-        logger.info(
-            "Resolved %d isobaric precursor conflict(s) within %g ppm: %d -> %d rows, %d -> %d glycans",
-            conflict_count,
-            ISOBARIC_RESOLUTION_PPM,
-            rows_before,
-            len(all_df),
-            glycans_before,
-            all_df['Glycan'].nunique()
-        )
-    else:
-        logger.info(
-            "Isobaric precursor conflict resolution disabled; preserving %d conflict(s) within %g ppm",
-            conflict_count,
-            ISOBARIC_RESOLUTION_PPM
-        )
+    rows_before = len(all_df)
+    glycans_before = all_df['Glycan'].nunique()
+    scoring_config = CandidateScoringConfig(
+        precursor_cluster_ppm=ISOBARIC_RESOLUTION_PPM,
+        fragment_mass_tolerance=fragment_mass_tol,
+        minimum_distinct_fragments=candidate_min_fragments,
+        minimum_explained_intensity=candidate_min_explained_intensity,
+        minimum_candidate_score=candidate_min_score,
+        minimum_discriminative_evidence_difference=candidate_min_evidence_difference,
+        mass_outlier_min_delta_ppm=candidate_mass_outlier_min_delta,
+    )
+    scoring_result = score_and_resolve_candidates(
+        all_df,
+        scan_data=ms2_data,
+        config=scoring_config,
+        resolve=resolve_isobaric_conflicts,
+    )
+    all_df = scoring_result.resolved_rows
+    score_path = os.path.join(output_dir, "candidate_scores.csv")
+    scoring_result.candidate_scores.to_csv(score_path, index=False)
+    not_quantified = scoring_result.reported_rows.loc[
+        ~scoring_result.reported_rows['selected']
+    ].copy()
+    not_quantified_path = os.path.join(output_dir, "candidate_rows_not_quantified.csv")
+    not_quantified.to_csv(not_quantified_path, index=False)
+    status_counts = scoring_result.candidate_scores['resolution_status'].value_counts().to_dict()
+    logger.info("Wrote candidate scoring audit table to %s", score_path)
+    logger.info(
+        "Wrote %d matched row(s) excluded from composition-level quantification to %s",
+        len(not_quantified),
+        not_quantified_path,
+    )
+    logger.info(
+        "Scored %d precursor conflict(s) within %g ppm: %d -> %d rows, %d -> %d glycans; statuses=%s",
+        conflict_count,
+        ISOBARIC_RESOLUTION_PPM,
+        rows_before,
+        len(all_df),
+        glycans_before,
+        all_df['Glycan'].nunique(),
+        status_counts,
+    )
     ms1_resolved = _filter_ms1_to_resolved_assignments(
         ms1_results,
         all_df,

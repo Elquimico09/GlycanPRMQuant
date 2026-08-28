@@ -216,6 +216,26 @@ class PipelineGUI(tk.Tk):
             .grid(column=5, row=selector_row, padx=8, pady=6, sticky="w")
         row += 1
 
+        scoring_frame = section("Candidate Scoring")
+        scoring_params = [
+            ("Minimum fragments", 2),
+            ("Minimum explained intensity", 0.005),
+            ("Minimum candidate score", 35.0),
+            ("Minimum evidence difference", 4.0),
+            ("Mass-outlier minimum Δppm", 2.0),
+        ]
+        self._scoring_vars = {}
+        for i, (label, default) in enumerate(scoring_params):
+            r = 1 + i // 3
+            c = (i % 3) * 2
+            self._scoring_vars[label] = add_label_entry(label, default, r, c, scoring_frame)
+        self.candidate_min_fragments = self._scoring_vars["Minimum fragments"]
+        self.candidate_min_explained_intensity = self._scoring_vars["Minimum explained intensity"]
+        self.candidate_min_score = self._scoring_vars["Minimum candidate score"]
+        self.candidate_min_evidence_difference = self._scoring_vars["Minimum evidence difference"]
+        self.candidate_mass_outlier_min_delta = self._scoring_vars["Mass-outlier minimum Δppm"]
+        row += 1
+
         # Optional mass corrections
         optional_frame = section("Optional")
         self.mz_offset = add_label_entry("m/z offset", 0.0, 1, 0, optional_frame)
@@ -351,6 +371,11 @@ class PipelineGUI(tk.Tk):
                 "skyline_transition": bool(self.skyline_var.get()),
                 "enable_smoothing": bool(self.smoothing_var.get()),
                 "resolve_isobaric_conflicts": bool(self.isobaric_resolution_var.get()),
+                "candidate_min_fragments": int(self.candidate_min_fragments.get()),
+                "candidate_min_explained_intensity": float(self.candidate_min_explained_intensity.get()),
+                "candidate_min_score": float(self.candidate_min_score.get()),
+                "candidate_min_evidence_difference": float(self.candidate_min_evidence_difference.get()),
+                "candidate_mass_outlier_min_delta": float(self.candidate_mass_outlier_min_delta.get()),
             }
         except ValueError as e:
             messagebox.showerror("Parameter error", f"Invalid number: {e}")
@@ -384,6 +409,19 @@ class PipelineGUI(tk.Tk):
             params["n_workers"] = 61
         if params["fragment_max_cleavages"] < 1:
             messagebox.showerror("Parameter error", "Max cleavages must be >= 1")
+            return
+        if params["candidate_min_fragments"] < 1:
+            messagebox.showerror("Parameter error", "Minimum candidate fragments must be >= 1")
+            return
+        if not 0 <= params["candidate_min_explained_intensity"] <= 1:
+            messagebox.showerror("Parameter error", "Minimum explained intensity must be between 0 and 1")
+            return
+        if (
+            params["candidate_min_score"] < 0
+            or params["candidate_min_evidence_difference"] < 0
+            or params["candidate_mass_outlier_min_delta"] < 0
+        ):
+            messagebox.showerror("Parameter error", "Candidate score thresholds cannot be negative")
             return
         database_path = params.pop("database_path")
         params["precursor_db_path"] = database_path
@@ -585,6 +623,11 @@ class PipelineGUI(tk.Tk):
             "skyline_transition": self.skyline_var.get(),
             "enable_smoothing": self.smoothing_var.get(),
             "resolve_isobaric_conflicts": self.isobaric_resolution_var.get(),
+            "candidate_min_fragments": self.candidate_min_fragments.get(),
+            "candidate_min_explained_intensity": self.candidate_min_explained_intensity.get(),
+            "candidate_min_score": self.candidate_min_score.get(),
+            "candidate_min_evidence_difference": self.candidate_min_evidence_difference.get(),
+            "candidate_mass_outlier_min_delta": self.candidate_mass_outlier_min_delta.get(),
         }
         try:
             with open(self._prefs_path, "w", encoding="utf-8") as f:
@@ -617,6 +660,11 @@ class PipelineGUI(tk.Tk):
             ("mz_offset", self.mz_offset),
             ("rel_height", self.rel_height),
             ("rel_height_mode", self.rel_height_mode),
+            ("candidate_min_fragments", self.candidate_min_fragments),
+            ("candidate_min_explained_intensity", self.candidate_min_explained_intensity),
+            ("candidate_min_score", self.candidate_min_score),
+            ("candidate_min_evidence_difference", self.candidate_min_evidence_difference),
+            ("candidate_mass_outlier_min_delta", self.candidate_mass_outlier_min_delta),
         ]:
             if key in prefs:
                 var.set(prefs[key])

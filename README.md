@@ -219,9 +219,14 @@ Useful CLI flags:
   `N_glycan_db.csv`.
 - `--skyline-transition` writes Skyline transition lists.
 - `--disable-smoothing` disables chromatogram/AUC smoothing.
-- `--disable-isobaric-resolution` keeps all glycan assignments whose precursor
-  m/z values fall within the 20 ppm isobaric-resolution window instead of
-  selecting the assignment with stronger fragment evidence.
+- `--disable-isobaric-resolution` reports all glycan assignments whose precursor
+  m/z values fall within the 20 ppm isobaric-resolution window. Candidate
+  scores are still calculated, but contested assignments are not included in
+  composition-level AUC because no winner was selected.
+- `--candidate-min-fragments`, `--candidate-min-explained-intensity`,
+  `--candidate-min-score`, and `--candidate-min-evidence-difference` control
+  when an isobaric assignment is resolved. `--candidate-mass-outlier-min-delta`
+  sets the minimum precursor-error separation used by audited pruning.
 - `--quiet` shows warnings/errors only.
 - `-v` and `-vv` increase logging verbosity.
 
@@ -353,6 +358,71 @@ The returned rows are restricted to the selected best-scoring IUPAC and include:
 - `IUPAC_unique_fragments`
 - `IUPAC_total_intensity`
 
+### Isobaric composition scoring
+
+After structure-level matching, numerical-composition candidates within 20 ppm
+are scored independently inside each detected retention-time feature. The
+composition scorer:
+
+1. Deduplicates repeated matches to the same observed peak within a scan.
+2. Counts distinct fragment transitions instead of matched table rows.
+3. Down-weights observed peaks shared by multiple composition candidates.
+4. Uses the specificity-weighted explained MS2 intensity fraction.
+5. Estimates a robust signed precursor-error center and sigma from the run,
+   then converts each candidate's error into a Gaussian likelihood relative to
+   the best precursor match in the same feature.
+6. Measures chromatographic coherence against the precursor trace, a consensus
+   of fragments shared by the conflict set, or the MS2 TIC fallback using
+   peak-shape correlation, apex agreement, and trace overlap.
+7. Uses chromatographic coherence only when it is evaluable for every candidate
+   in a contested feature. If any candidate is missing it, every candidate gets
+   the same neutral coelution component.
+
+The bounded candidate score is:
+
+```text
+100 * (
+    0.35 * explained-intensity component
+  + 0.20 * distinct-fragment support
+  + 0.15 * fragment mass accuracy
+  + 0.10 * within-feature precursor relative likelihood
+  + 0.20 * feature-symmetric chromatographic coherence
+)
+```
+
+The bounded score remains an absolute evidence-quality check. Candidate ranking
+and runner-up separation use a separate discriminative score:
+
+```text
+35 * explained-intensity component
++ 20 * distinct-fragment support
++ 15 * fragment mass accuracy
++  2 * within-feature precursor log-likelihood
++ 20 * feature-symmetric chromatographic coherence
+```
+
+This score is centered within each feature, so evidence shared equally by all
+candidates cancels exactly. Resolution uses the top-minus-runner-up
+discriminative evidence difference and no longer uses a ratio of total scores.
+
+A candidate with zero candidate-specific fragments is pruned before ranking only
+when its calibrated precursor error is also farther from the best candidate by
+more than both 2 ppm and four calibrated sigmas. The decision is recorded in
+`mass_outlier_pruned`, `mass_outlier_threshold_ppm`, and
+`candidate_rejection_reason`; the row is never deleted from the audit output. If
+no candidate in a contested feature has a distinguishing fragment, the feature
+receives `no_discriminating_fragment_evidence` and no winner is selected.
+
+A top candidate is selected for composition-level quantification only when it
+passes the minimum fragment, explained-intensity, bounded-score, and
+discriminative-difference checks. Otherwise, conflicting candidates are
+reported with `ambiguous`, `insufficient_evidence`, `possible_coisolation`, or
+`no_discriminating_fragment_evidence` status but receive `selected=False` and
+`quantification_weight=0`. A sole surviving candidate after audited pruning is
+reported as `resolved_after_mass_pruning`. Non-quantified fragment rows are kept
+in `candidate_rows_not_quantified.csv`. Isobaric candidates at separate
+chromatographic peaks remain separate RT features.
+
 ## Important Parameters
 
 - `ppm_ms1_tol`: tolerance in ppm for precursor database matching and for
@@ -372,6 +442,17 @@ The returned rows are restricted to the selected best-scoring IUPAC and include:
 - `rel_height`: AUC boundary relative height.
 - `rel_height_mode`: `prominence` or `height`.
 - `skyline_transition`: write a Skyline transition list when `True`.
+- `candidate_min_fragments`: minimum distinct fragments needed to resolve a
+  conflict; default `2`.
+- `candidate_min_explained_intensity`: minimum specificity-weighted explained
+  intensity fraction; default `0.005`.
+- `candidate_min_score`: minimum bounded candidate score; default `35`.
+- `candidate_min_evidence_difference`: minimum top-minus-runner-up difference
+  in discriminative evidence; default `4`. Common-mode evidence does not affect
+  this difference.
+- `candidate_mass_outlier_min_delta`: absolute floor, in ppm, for pruning a
+  zero-specific-evidence candidate. The effective threshold is the larger of
+  this value and four run-calibrated precursor sigmas; default `2`.
 
 ## Outputs
 
@@ -381,6 +462,16 @@ Each sample output directory can include:
   Matched precursor assignments.
 - `ms1_results_resolved.csv`  
   MS1 precursor assignments that survived MS2-based isobaric resolution.
+- `candidate_scores.csv`
+  Candidate-level component scores, RT-feature boundaries, runner-up metrics,
+  precursor calibration and pruning audit fields, coelution comparability,
+  discriminative evidence, `reported`/`selected` flags, quantification weight,
+  and resolution status for every composition considered. Here,
+  `selected=True` specifically means that the candidate is eligible for
+  composition-level quantification.
+- `candidate_rows_not_quantified.csv`
+  Matched fragment rows for losing or unresolved candidate hypotheses. These
+  rows remain available for review but are excluded from glycan AUC outputs.
 - `ms2_<glycan>.csv`  
   Matched MS2 rows for a numerical glycan composition, including selected IUPAC
   structure information.

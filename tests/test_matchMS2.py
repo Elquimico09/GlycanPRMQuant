@@ -49,7 +49,11 @@ def test_matchms2_generates_fragments_and_selects_best_iupac(tmp_path, monkeypat
         }
     )
     precursor_matches = pd.DataFrame(
-        {"precursor_mz": [500.0], "Glycan": ["25000"], "Adduct": ["2H"]}
+        {
+            "precursor_mz": [500.0, 500.0],
+            "Glycan": ["25000", "25000"],
+            "Adduct": ["2H", "2H"],
+        }
     )
 
     matched = ms2_module.matchMS2(
@@ -68,3 +72,4 @@ def test_matchms2_generates_fragments_and_selects_best_iupac(tmp_path, monkeypat
     assert set(matched["IUPAC"]) == {"best-iupac"}
     assert matched["IUPAC_match_count"].iloc[0] == 2
     assert matched["NumericalComposition"].iloc[0] == "25000"
+    assert matched["fragment_intensity"].max() == 1000.0
