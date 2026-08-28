@@ -71,6 +71,8 @@ Main flow:
 1) Load fragment database CSV (`database/fragment_database.csv`).
 2) Filter to the target glycan composition.
 3) Build a theoretical fragment list with adducts and charges.
+   NeuAc-containing fragment substructures also receive charge-aware `-CH3OH`
+   neutral-loss variants.
 4) Filter MS2 rows to those whose precursor matches the MS1 hits for the glycan.
 5) Cluster fragments per scan using `preprocess_ms2_data` (reduces near-duplicate peaks).
 6) Use a KD-tree to match observed fragment m/z to theoretical m/z within `fragment_mass_tol`.

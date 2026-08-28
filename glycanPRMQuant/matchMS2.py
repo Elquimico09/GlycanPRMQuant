@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 import numpy as np
 from scipy.spatial import cKDTree
-from .constants import DEFAULT_PRECURSOR_DB
+from .constants import DEFAULT_PRECURSOR_DB, METHANOL_MASS
 from .fragment_structure import fragment_glycan
 import os
 
@@ -105,55 +105,72 @@ def _build_fragment_db(
 
 
 def _build_adduct_table(dbf: pd.DataFrame, precursor_composition: str) -> pd.DataFrame:
+    fragment_iupac = (
+        dbf['fragment_iupac']
+        if 'fragment_iupac' in dbf
+        else pd.Series("", index=dbf.index)
+    )
+    contains_neuac = (
+        dbf['contains_neuac'].fillna(False).astype(bool)
+        if 'contains_neuac' in dbf
+        else pd.Series(False, index=dbf.index)
+    )
+    common = {
+        'Fragment': dbf['Fragment'],
+        'FragmentType': dbf['FragmentType'],
+        'IUPAC': dbf['IUPAC'],
+        'NumericalComposition': dbf['NumericalComposition'],
+        'Composition': dbf['Composition'],
+        'fragment_iupac': fragment_iupac,
+        'contains_neuac': contains_neuac,
+    }
     table = [
         pd.DataFrame({
+            **common,
             'Theo_mz': dbf['[M+H]+'],
-            'Fragment': dbf['Fragment'],
-            'FragmentType': dbf['FragmentType'],
             'Charge': 1,
             'Adduct': '+H',
-            'IUPAC': dbf['IUPAC'],
-            'NumericalComposition': dbf['NumericalComposition'],
-            'Composition': dbf['Composition'],
         }),
         pd.DataFrame({
+            **common,
             'Theo_mz': dbf['[M+2H]2+'],
-            'Fragment': dbf['Fragment'],
-            'FragmentType': dbf['FragmentType'],
             'Charge': 2,
             'Adduct': '+2H',
-            'IUPAC': dbf['IUPAC'],
-            'NumericalComposition': dbf['NumericalComposition'],
-            'Composition': dbf['Composition'],
         }),
     ]
 
     if str(precursor_composition).startswith('2'):
         table.extend([
             pd.DataFrame({
+                **common,
                 'Theo_mz': dbf['[M+NH4]+'],
-                'Fragment': dbf['Fragment'],
-                'FragmentType': dbf['FragmentType'],
                 'Charge': 1,
                 'Adduct': '+NH4',
-                'IUPAC': dbf['IUPAC'],
-                'NumericalComposition': dbf['NumericalComposition'],
-                'Composition': dbf['Composition'],
             }),
             pd.DataFrame({
+                **common,
                 'Theo_mz': dbf['[M+NH4+H]2+'],
-                'Fragment': dbf['Fragment'],
-                'FragmentType': dbf['FragmentType'],
                 'Charge': 2,
                 'Adduct': '+H+NH4',
-                'IUPAC': dbf['IUPAC'],
-                'NumericalComposition': dbf['NumericalComposition'],
-                'Composition': dbf['Composition'],
             }),
         ])
 
     adduct_df = pd.concat(table, ignore_index=True)
     adduct_df = adduct_df.dropna(subset=['Theo_mz'])
+    adduct_df['neutral_loss'] = ""
+    adduct_df['fragment_annotation'] = adduct_df['Fragment'].astype(str)
+
+    methanol_losses = adduct_df.loc[adduct_df['contains_neuac']].copy()
+    if not methanol_losses.empty:
+        methanol_losses['Theo_mz'] = (
+            methanol_losses['Theo_mz']
+            - METHANOL_MASS / methanol_losses['Charge']
+        )
+        methanol_losses['neutral_loss'] = "CH3OH"
+        methanol_losses['fragment_annotation'] = (
+            methanol_losses['Fragment'].astype(str) + "-CH3OH"
+        )
+        adduct_df = pd.concat([adduct_df, methanol_losses], ignore_index=True)
     return adduct_df
 
 
@@ -326,8 +343,13 @@ def matchMS2(
             diff = float(hit['mz_diff'])
             row = dict(base_data[i])
             row.update({
-                'Fragment': hit['Fragment'],
+                'Fragment': hit['fragment_annotation'],
+                'BaseFragment': hit['Fragment'],
                 'FragmentType': hit['FragmentType'],
+                'fragment_annotation': hit['fragment_annotation'],
+                'fragment_iupac': hit['fragment_iupac'],
+                'contains_neuac': bool(hit['contains_neuac']),
+                'neutral_loss': hit['neutral_loss'],
                 'Charge': int(hit['Charge']),
                 'Fragment_mz': float(hit['Theo_mz']),
                 'mz_diff': diff,

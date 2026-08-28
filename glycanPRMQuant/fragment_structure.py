@@ -49,10 +49,23 @@ def fragment_glycan(iupac_str: str,
         neutral_mass = frag.mass() if callable(frag.mass) else frag.mass
         series = frag.series
         fragment_name = getattr(frag, "name", None) or str(frag)
+        try:
+            fragment_iupac = iupac.dumps(
+                glycan.fragment_to_substructure(frag),
+                dialect="simple",
+            )
+        except (KeyError, TypeError, ValueError):
+            fragment_iupac = ""
+        contains_neuac = "Neu" in fragment_iupac and any(
+            marker in fragment_iupac
+            for marker in ("5Ac", "5NAc", "NeuAc")
+        )
 
         fragments.append({
             "name": fragment_name,
             "series": series,
+            "fragment_iupac": fragment_iupac,
+            "contains_neuac": contains_neuac,
             "neutral_mass": neutral_mass,
             "[M+H]+": neutral_mass + PROTON_MASS,
             "[M+2H]2+": (neutral_mass + 2 * PROTON_MASS) / 2,

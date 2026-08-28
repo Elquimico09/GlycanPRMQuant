@@ -286,6 +286,10 @@ The N-glycan structure database should include:
 - `Composition`
 - `Numerical Composition`
 
+`Numerical Composition` is validated against every condensed IUPAC structure
+as the concatenated `HexNAc`, `Hex`, `Fuc`, `Neu5Ac`, and `Neu5Gc` residue
+counts, in that order.
+
 `matchMS1` groups by `Composition` and calculates mass once per composition.
 `matchMS2` groups by `Numerical Composition` and fragments each candidate IUPAC
 structure for that composition.
@@ -315,7 +319,13 @@ The output includes:
 
 `matchMS2` uses the matched numerical composition to find all candidate IUPAC
 structures, generates theoretical fragments, and matches observed fragments by
-m/z tolerance. It scores candidate structures by:
+m/z tolerance.
+
+For each theoretical fragment whose substructure contains NeuAc, matching also
+includes a methanol neutral-loss variant (`-CH3OH`). The neutral mass loss is
+32.026215 Da, so the fragment m/z shift is divided by its charge.
+
+It scores candidate structures by:
 
 1. Total matched fragment count
 2. Unique matched fragment count
@@ -329,7 +339,12 @@ The returned rows are restricted to the selected best-scoring IUPAC and include:
 - `Composition`
 - `IUPAC`
 - `Fragment`
+- `BaseFragment`
 - `FragmentType`
+- `fragment_annotation`
+- `fragment_iupac`
+- `contains_neuac`
+- `neutral_loss`
 - `fragment_mz`
 - `fragment_intensity`
 - `Charge`
