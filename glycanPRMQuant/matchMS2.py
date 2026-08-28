@@ -104,7 +104,19 @@ def _build_fragment_db(
     return frag_db.copy()
 
 
-def _build_adduct_table(dbf: pd.DataFrame, precursor_composition: str) -> pd.DataFrame:
+def _build_adduct_table(
+    dbf: pd.DataFrame,
+    precursor_adducts,
+) -> pd.DataFrame:
+    """Build product-ion forms allowed by each observed precursor adduct."""
+    if isinstance(precursor_adducts, str):
+        precursor_adducts = [precursor_adducts]
+    precursor_adducts = sorted(
+        {str(adduct) for adduct in precursor_adducts if pd.notna(adduct)}
+    )
+    if not precursor_adducts:
+        precursor_adducts = [""]
+
     fragment_iupac = (
         dbf['fragment_iupac']
         if 'fragment_iupac' in dbf
@@ -124,36 +136,35 @@ def _build_adduct_table(dbf: pd.DataFrame, precursor_composition: str) -> pd.Dat
         'fragment_iupac': fragment_iupac,
         'contains_neuac': contains_neuac,
     }
-    table = [
-        pd.DataFrame({
-            **common,
-            'Theo_mz': dbf['[M+H]+'],
-            'Charge': 1,
-            'Adduct': '+H',
-        }),
-        pd.DataFrame({
-            **common,
-            'Theo_mz': dbf['[M+2H]2+'],
-            'Charge': 2,
-            'Adduct': '+2H',
-        }),
-    ]
+    table = []
+    for precursor_adduct in precursor_adducts:
+        product_ions = [
+            ('[M+H]+', 1, '+H'),
+            ('[M+2H]2+', 2, '+2H'),
+        ]
+        if precursor_adduct == 'H+NH4':
+            product_ions.extend([
+                ('[M+NH4]+', 1, '+NH4'),
+                ('[M+NH4+H]2+', 2, '+H+NH4'),
+            ])
+        elif precursor_adduct == '2NH4':
+            product_ions.extend([
+                ('[M+NH4]+', 1, '+NH4'),
+                ('[M+2NH4]2+', 2, '+2NH4'),
+            ])
 
-    if str(precursor_composition).startswith('2'):
-        table.extend([
-            pd.DataFrame({
-                **common,
-                'Theo_mz': dbf['[M+NH4]+'],
-                'Charge': 1,
-                'Adduct': '+NH4',
-            }),
-            pd.DataFrame({
-                **common,
-                'Theo_mz': dbf['[M+NH4+H]2+'],
-                'Charge': 2,
-                'Adduct': '+H+NH4',
-            }),
-        ])
+        for mass_column, charge, fragment_adduct in product_ions:
+            if mass_column not in dbf.columns:
+                continue
+            table.append(
+                pd.DataFrame({
+                    **common,
+                    'Theo_mz': dbf[mass_column],
+                    'Charge': charge,
+                    'Adduct': fragment_adduct,
+                    '_PrecursorAdduct': precursor_adduct,
+                })
+            )
 
     adduct_df = pd.concat(table, ignore_index=True)
     adduct_df = adduct_df.dropna(subset=['Theo_mz'])
@@ -260,7 +271,9 @@ def matchMS2(
     For each numerical composition, all parsable IUPAC candidate structures are
     fragmented, observed MS2 fragments are matched to those theoretical
     fragments, and the best-scoring IUPAC structure is returned.
-    NH4 adducts are only included if glycan starts with '2'.
+    Protonated product ions are always considered. Ammonium-bearing product
+    ions are additionally considered for precursor assignments labeled H+NH4
+    or 2NH4.
 
     :param fragment_mass_tol: Fragment m/z matching tolerance in Da.
     :param ppm_tol: Precursor matching tolerance in ppm.
@@ -281,14 +294,6 @@ def matchMS2(
     if dbf.empty:
         logger.info(f"No fragmentable IUPAC database entries for {precursor_composition}")
         return pd.DataFrame()
-
-    adduct_df = _build_adduct_table(dbf, precursor_composition)
-    if adduct_df.empty:
-        logger.info(f"No theoretical fragment adducts for {precursor_composition}")
-        return pd.DataFrame()
-
-    theo_mzs = adduct_df['Theo_mz'].to_numpy()
-    tree = cKDTree(theo_mzs.reshape(-1, 1))
 
     # 3) select MS2 rows whose precursor_mz matches an MS1 precursor (track adduct per precursor)
     precursor_matched_data = precursor_matched_data.copy()
@@ -348,6 +353,13 @@ def matchMS2(
     ms2f = preprocess_ms2_data(ms2f, fragment_mass_tol=0.1)
 
     # 5) perform vectorized adduct matching against all candidate IUPAC structures
+    adduct_df = _build_adduct_table(dbf, ms2f['PrecursorAdduct'].unique())
+    if adduct_df.empty:
+        logger.info(f"No theoretical fragment adducts for {precursor_composition}")
+        return pd.DataFrame()
+
+    theo_mzs = adduct_df['Theo_mz'].to_numpy()
+    tree = cKDTree(theo_mzs.reshape(-1, 1))
     obs_mzs = ms2f['fragment_mz'].to_numpy()
     neighbors = tree.query_ball_point(obs_mzs.reshape(-1, 1), r=fragment_mass_tol)
 
@@ -363,6 +375,11 @@ def matchMS2(
         if not nbrs:
             continue
         hits = adduct_df.iloc[nbrs].copy()
+        hits = hits.loc[
+            hits['_PrecursorAdduct'].eq(str(base_data[i]['PrecursorAdduct']))
+        ]
+        if hits.empty:
+            continue
         hits['mz_diff'] = np.abs(hits['Theo_mz'].to_numpy() - obs_mzs[i])
         hits = hits.sort_values('mz_diff').drop_duplicates(subset=['IUPAC'], keep='first')
 
