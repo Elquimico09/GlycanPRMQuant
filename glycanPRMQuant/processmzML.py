@@ -299,8 +299,7 @@ def process_mzml_pipeline(
     mz_offset: float = 0.0,
     mass_offset: float = 0.0,
     intensity_threshold: float = 1e2,
-    ppm_ms2_tol: float = 10,
-    mz_tol: float = 0.02,
+    fragment_mass_tol: float = 0.02,
     smoothing_window: int = 11,
     smoothing_method: str = "gaussian",
     fragment_top_n: int = 10,
@@ -356,7 +355,7 @@ def process_mzml_pipeline(
     if precs.size > 0:
         mask = pd.Series(False, index=ms2_data.index)
         for p in precs:
-            tol = p * ppm_ms2_tol / 1e6
+            tol = p * ppm_ms1_tol / 1e6
             mask |= ms2_data['precursor_mz'].between(p - tol, p + tol)
         ms2_data = ms2_data.loc[mask].reset_index(drop=True)
         logger.info(f"Pre-filtered MS2 to {len(ms2_data)} rows for matched precursors")
@@ -381,8 +380,8 @@ def process_mzml_pipeline(
             ms2_data,
             ms1_results,
             precursor_composition=glycan,
-            ppm_tol=ppm_ms2_tol,
-            mz_tol=mz_tol,
+            ppm_tol=ppm_ms1_tol,
+            fragment_mass_tol=fragment_mass_tol,
             intensity_threshold=intensity_threshold,
             ion_series=fragment_ion_series,
             max_cleavages=fragment_max_cleavages,

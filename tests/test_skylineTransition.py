@@ -14,7 +14,11 @@ def test_dedupe_ms2_fragments_clusters_by_precursor(tmp_path):
         }
     ).to_csv(input_csv, index=False)
 
-    out = dedupe_ms2_fragments(str(input_csv), str(output_csv), mz_tol=0.02)
+    out = dedupe_ms2_fragments(
+        str(input_csv),
+        str(output_csv),
+        fragment_mass_tol=0.02,
+    )
 
     assert output_csv.exists()
     assert len(out) == 2

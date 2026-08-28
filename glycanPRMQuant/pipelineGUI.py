@@ -161,8 +161,7 @@ class PipelineGUI(tk.Tk):
             ("MS1 m/z min", 400),
             ("MS1 m/z max", 2000),
             ("MS2 intensity", 1e2),
-            ("MS2 ppm tol", 10),
-            ("MS2 m/z tol", 0.02),
+            ("Fragment mass tol", 0.02),
             ("Max cleavages", 2),
             ("Smoothing window", 5),
             ("Mass offset", 0.0),
@@ -184,8 +183,7 @@ class PipelineGUI(tk.Tk):
         self.mz_min = self._param_vars["MS1 m/z min"]
         self.mz_max = self._param_vars["MS1 m/z max"]
         self.intensity_threshold = self._param_vars["MS2 intensity"]
-        self.ppm_ms2_tol = self._param_vars["MS2 ppm tol"]
-        self.mz_tol = self._param_vars["MS2 m/z tol"]
+        self.fragment_mass_tol = self._param_vars["Fragment mass tol"]
         self.fragment_max_cleavages = self._param_vars["Max cleavages"]
         self.smoothing_window = self._param_vars["Smoothing window"]
         self.mass_offset = self._param_vars["Mass offset"]
@@ -338,8 +336,7 @@ class PipelineGUI(tk.Tk):
                 "mz_min": float(self.mz_min.get()),
                 "mz_max": float(self.mz_max.get()),
                 "intensity_threshold": float(self.intensity_threshold.get()),
-                "ppm_ms2_tol": float(self.ppm_ms2_tol.get()),
-                "mz_tol": float(self.mz_tol.get()),
+                "fragment_mass_tol": float(self.fragment_mass_tol.get()),
                 "fragment_ion_series": self.fragment_ion_series.get(),
                 "fragment_max_cleavages": int(self.fragment_max_cleavages.get()),
                 "smoothing_window": int(self.smoothing_window.get()),
@@ -574,8 +571,7 @@ class PipelineGUI(tk.Tk):
             "mz_min": self.mz_min.get(),
             "mz_max": self.mz_max.get(),
             "intensity_threshold": self.intensity_threshold.get(),
-            "ppm_ms2_tol": self.ppm_ms2_tol.get(),
-            "mz_tol": self.mz_tol.get(),
+            "fragment_mass_tol": self.fragment_mass_tol.get(),
             "fragment_ion_series": self.fragment_ion_series.get(),
             "fragment_max_cleavages": self.fragment_max_cleavages.get(),
             "smoothing_window": self.smoothing_window.get(),
@@ -618,8 +614,7 @@ class PipelineGUI(tk.Tk):
             ("mz_min", self.mz_min),
             ("mz_max", self.mz_max),
             ("intensity_threshold", self.intensity_threshold),
-            ("ppm_ms2_tol", self.ppm_ms2_tol),
-            ("mz_tol", self.mz_tol),
+            ("fragment_mass_tol", self.fragment_mass_tol),
             ("fragment_ion_series", self.fragment_ion_series),
             ("fragment_max_cleavages", self.fragment_max_cleavages),
             ("smoothing_window", self.smoothing_window),

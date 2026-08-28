@@ -201,7 +201,10 @@ def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
     return labels[inv]
 
 
-def preprocess_ms2_data(ms2: pd.DataFrame, mz_tol: float = 0.1) -> pd.DataFrame:
+def preprocess_ms2_data(
+    ms2: pd.DataFrame,
+    fragment_mass_tol: float = 0.1
+) -> pd.DataFrame:
     """
     For each (scan_number, precursor_mz) group, cluster fragment_mz via cluster_1d
     and collapse to one row per cluster (mean m/z, summed intensity).
@@ -210,7 +213,7 @@ def preprocess_ms2_data(ms2: pd.DataFrame, mz_tol: float = 0.1) -> pd.DataFrame:
     grouped = ms2.groupby(['scan_number', 'precursor_mz'])
     for (scan, prec), grp in grouped:
         mzs = grp['fragment_mz'].to_numpy()
-        labels = cluster_1d(mzs, mz_tol)
+        labels = cluster_1d(mzs, fragment_mass_tol)
         for cl in np.unique(labels):
             sub = grp.iloc[labels == cl]
             row = sub.iloc[0].copy()
@@ -226,7 +229,7 @@ def matchMS2(
     ms2_extracted_data: pd.DataFrame,
     precursor_matched_data: pd.DataFrame,
     precursor_composition: str,
-    mz_tol: float = 0.02,
+    fragment_mass_tol: float = 0.02,
     intensity_threshold: float = 1e2,
     ppm_tol: float = 10,
     db_path: str = None,
@@ -242,6 +245,8 @@ def matchMS2(
     fragments, and the best-scoring IUPAC structure is returned.
     NH4 adducts are only included if glycan starts with '2'.
 
+    :param fragment_mass_tol: Fragment m/z matching tolerance in Da.
+    :param ppm_tol: Precursor matching tolerance in ppm.
     :param db_path: Path to N-glycan database CSV/Excel file. If None, uses default.
     """
     if db_path is None:
@@ -300,11 +305,11 @@ def matchMS2(
     ms2f = pd.concat(filt, ignore_index=True)
 
     # 4) cluster fragments within each spectrum
-    ms2f = preprocess_ms2_data(ms2f, mz_tol=0.1)
+    ms2f = preprocess_ms2_data(ms2f, fragment_mass_tol=0.1)
 
     # 5) perform vectorized adduct matching against all candidate IUPAC structures
     obs_mzs = ms2f['fragment_mz'].to_numpy()
-    neighbors = tree.query_ball_point(obs_mzs.reshape(-1, 1), r=mz_tol)
+    neighbors = tree.query_ball_point(obs_mzs.reshape(-1, 1), r=fragment_mass_tol)
 
     matched = []
     base_cols = ['scan_number', 'rt', 'precursor_mz', 'fragment_intensity', 'Glycan', 'PrecursorAdduct']

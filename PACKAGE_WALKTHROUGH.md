@@ -75,11 +75,11 @@ Main flow:
 3) Build a theoretical fragment list with adducts and charges.
 4) Filter MS2 rows to those whose precursor matches the MS1 hits for the glycan.
 5) Cluster fragments per scan using `preprocess_ms2_data` (reduces near-duplicate peaks).
-6) Use a KD-tree to match observed fragment m/z to theoretical m/z within `mz_tol`.
+6) Use a KD-tree to match observed fragment m/z to theoretical m/z within `fragment_mass_tol`.
 
 Outputs a DataFrame with fragment assignments, including `Fragment`, `Charge`, `Fragment_mz`, `mz_diff`, and `ppm_error`.
 
-If fragment matching is too strict or too loose, adjust `mz_tol`, the clustering tolerance in `preprocess_ms2_data`, or the adduct table.
+If fragment matching is too strict or too loose, adjust `fragment_mass_tol`, the clustering tolerance in `preprocess_ms2_data`, or the adduct table.
 
 ### `glycanPRMQuant/plotFragmentIntensity.py`
 

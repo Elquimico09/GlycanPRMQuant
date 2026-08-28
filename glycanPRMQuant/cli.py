@@ -14,9 +14,8 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mz-offset", type=float, default=0.0)
     parser.add_argument("--mass-offset", type=float, default=0.0)
     parser.add_argument("--intensity-threshold", type=float, default=1e2)
-    parser.add_argument("--ppm-ms2-tol", type=float, default=10)
-    parser.add_argument("--mz-tol", type=float, default=0.02)
-    parser.add_argument("--fragment-ion-series", default="ABCXYZ")
+    parser.add_argument("--fragment-mass-tol", type=float, default=0.02)
+    parser.add_argument("--fragment-ion-series", default="BY")
     parser.add_argument("--fragment-max-cleavages", type=int, default=2)
     parser.add_argument("--smoothing-window", type=int, default=11)
     parser.add_argument("--smoothing-method", choices=["gaussian", "savgol"], default="gaussian")
@@ -52,8 +51,7 @@ def _run_one(args: argparse.Namespace) -> int:
         mz_offset=args.mz_offset,
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,
-        ppm_ms2_tol=args.ppm_ms2_tol,
-        mz_tol=args.mz_tol,
+        fragment_mass_tol=args.fragment_mass_tol,
         smoothing_window=args.smoothing_window,
         smoothing_method=args.smoothing_method,
         enable_smoothing=not args.disable_smoothing,
@@ -85,8 +83,7 @@ def _run_batch(args: argparse.Namespace) -> int:
         mz_offset=args.mz_offset,
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,
-        ppm_ms2_tol=args.ppm_ms2_tol,
-        mz_tol=args.mz_tol,
+        fragment_mass_tol=args.fragment_mass_tol,
         fragment_ion_series=args.fragment_ion_series,
         fragment_max_cleavages=args.fragment_max_cleavages,
         smoothing_window=args.smoothing_window,

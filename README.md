@@ -188,8 +188,7 @@ Process one file:
 ```bash
 glycan-prmquant run path/to/sample.raw path/to/output_dir \
   --ppm-ms1-tol 10 \
-  --ppm-ms2-tol 10 \
-  --mz-tol 0.02 \
+  --fragment-mass-tol 0.02 \
   --fragment-ion-series BY \
   --fragment-max-cleavages 2
 ```
@@ -236,8 +235,7 @@ process_mzml_pipeline(
     mz_min=400,
     mz_max=2000,
     intensity_threshold=1e2,
-    ppm_ms2_tol=10,
-    mz_tol=0.02,
+    fragment_mass_tol=0.02,
     fragment_ion_series="BY",
     fragment_max_cleavages=2,
 )
@@ -261,8 +259,7 @@ if __name__ == "__main__":
         output_root=r"path\to\results",
         n_workers=4,
         ppm_ms1_tol=10,
-        ppm_ms2_tol=10,
-        mz_tol=0.02,
+        fragment_mass_tol=0.02,
         fragment_ion_series="ABCXYZ",
         fragment_max_cleavages=2,
     )
@@ -343,15 +340,15 @@ The returned rows are restricted to the selected best-scoring IUPAC and include:
 
 ## Important Parameters
 
-- `ppm_ms1_tol`: precursor matching tolerance in ppm.
+- `ppm_ms1_tol`: tolerance in ppm for precursor database matching and for
+  associating MS2 scans with matched precursors.
 - `mz_min`, `mz_max`: precursor m/z search range.
 - `mz_offset`: offset applied to calculated precursor adduct m/z values.
 - `mass_offset`: offset applied to neutral masses before precursor adduct
   calculation.
 - `intensity_threshold`: minimum MS2 fragment intensity used during extraction
   and matching.
-- `ppm_ms2_tol`: tolerance used to associate MS2 scans with matched precursors.
-- `mz_tol`: fragment m/z tolerance in Da.
+- `fragment_mass_tol`: fragment m/z tolerance in Da.
 - `fragment_ion_series`: allowed theoretical fragment ion series. Use any
   combination of `A`, `B`, `C`, `X`, `Y`, `Z`.
 - `fragment_max_cleavages`: maximum number of cleavages during theoretical

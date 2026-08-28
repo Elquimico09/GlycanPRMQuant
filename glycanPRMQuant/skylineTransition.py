@@ -4,7 +4,7 @@ from sklearn.cluster import DBSCAN
 def dedupe_ms2_fragments(
     ms2_csv_file: str,
     output_csv: str,
-    mz_tol: float = 0.02
+    fragment_mass_tol: float = 0.02
 ) -> pd.DataFrame:
     """
     Read an MS2 CSV, DBSCAN‐cluster the fragment m/z values for each precursor,
@@ -16,7 +16,7 @@ def dedupe_ms2_fragments(
         Path to the input MS2 CSV (must contain 'precursor_mz', 'fragment_mz', and 'Charge').
     output_csv : str
         Path where the deduplicated CSV will be written.
-    mz_tol : float
+    fragment_mass_tol : float
         Mass tolerance (Da) for clustering fragment m/z values.
 
     Returns
@@ -35,7 +35,7 @@ def dedupe_ms2_fragments(
     # Loop over each precursor
     for prec, grp in df.groupby('precursor_mz'):
         mzs = grp['fragment_mz'].values.reshape(-1, 1)
-        labels = DBSCAN(eps=mz_tol, min_samples=1).fit_predict(mzs)
+        labels = DBSCAN(eps=fragment_mass_tol, min_samples=1).fit_predict(mzs)
         grp = grp.assign(_cluster=labels)
 
         # For each cluster, compute mean m/z and take the first Charge

@@ -56,7 +56,7 @@ def test_matchms2_generates_fragments_and_selects_best_iupac(tmp_path, monkeypat
         ms2_data,
         precursor_matches,
         precursor_composition="25000",
-        mz_tol=0.01,
+        fragment_mass_tol=0.01,
         intensity_threshold=100.0,
         ppm_tol=10,
         db_path=str(db_path),
