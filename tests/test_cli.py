@@ -32,9 +32,14 @@ def test_run_parser_uses_one_precursor_tolerance_and_named_fragment_tolerance():
     assert args.fragment_mass_tol == 0.03
     assert not hasattr(args, "ppm_ms2_tol")
     assert not hasattr(args, "mz_tol")
+    assert not hasattr(args, "mz_min")
+    assert not hasattr(args, "mz_max")
 
 
-@pytest.mark.parametrize("removed_option", ["--ppm-ms2-tol", "--mz-tol"])
+@pytest.mark.parametrize(
+    "removed_option",
+    ["--ppm-ms2-tol", "--mz-tol", "--mz-min", "--mz-max"],
+)
 def test_run_parser_rejects_removed_tolerance_options(removed_option):
     parser = build_parser()
 

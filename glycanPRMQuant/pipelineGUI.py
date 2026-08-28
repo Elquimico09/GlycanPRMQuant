@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import scrolledtext
 from tkinter import ttk
+from glycanPRMQuant.database_utils import validate_glycan_database
 from glycanPRMQuant.parallelProcess import run_parallel_pipeline
 from glycanPRMQuant.spectra import validate_input_file_types
 
@@ -71,6 +72,7 @@ class PipelineGUI(tk.Tk):
         style.map("Danger.TButton",
                   background=[("active", "#dc2626"), ("disabled", "#1f2937")],
                   foreground=[("disabled", "#9ca3af")])
+        style.configure("Warning.TLabel", background=self._colors["panel"], foreground="#f59e0b")
         style.configure("TCheckbutton", background=self._colors["panel"], foreground=self._colors["text"])
         style.map("TCheckbutton",
                   background=[("active", self._colors["panel"])],
@@ -138,19 +140,21 @@ class PipelineGUI(tk.Tk):
         ttk.Entry(io_frame, textvariable=self.out_dir, width=40).grid(column=1, row=2, columnspan=2, padx=8, pady=6, sticky="w")
         ttk.Button(io_frame, text="Browse", command=self._choose_output).grid(column=3, row=2, padx=8, pady=6)
 
-        tk.Label(io_frame, text="Precursor DB:", bg=self._colors["panel"], fg=self._colors["text"]) \
+        tk.Label(io_frame, text="Custom glycan database (optional):", bg=self._colors["panel"], fg=self._colors["text"]) \
             .grid(column=0, row=3, sticky="w", padx=8, pady=6)
-        self.precursor_db_path = tk.StringVar()
-        ttk.Entry(io_frame, textvariable=self.precursor_db_path, width=40) \
+        self.database_path = tk.StringVar()
+        ttk.Entry(io_frame, textvariable=self.database_path, width=40) \
             .grid(column=1, row=3, columnspan=2, padx=8, pady=6, sticky="w")
-        ttk.Button(io_frame, text="Browse", command=self._choose_precursor_db).grid(column=3, row=3, padx=8, pady=6)
-
-        tk.Label(io_frame, text="Structure DB:", bg=self._colors["panel"], fg=self._colors["text"]) \
-            .grid(column=0, row=4, sticky="w", padx=8, pady=6)
-        self.structure_db_path = tk.StringVar()
-        ttk.Entry(io_frame, textvariable=self.structure_db_path, width=40) \
-            .grid(column=1, row=4, columnspan=2, padx=8, pady=6, sticky="w")
-        ttk.Button(io_frame, text="Browse", command=self._choose_structure_db).grid(column=3, row=4, padx=8, pady=6)
+        ttk.Button(io_frame, text="Browse", command=self._choose_database).grid(column=3, row=3, padx=8, pady=6)
+        ttk.Label(
+            io_frame,
+            text=(
+                "Warning: Custom databases require nonblank Condensed IUPAC, Composition, "
+                "and Numerical Composition columns. Leave blank to use the bundled database."
+            ),
+            style="Warning.TLabel",
+            wraplength=650,
+        ).grid(column=1, row=4, columnspan=3, padx=8, pady=(0, 6), sticky="w")
         row += 1
 
         # Numeric parameters arranged in 3 columns
@@ -158,14 +162,10 @@ class PipelineGUI(tk.Tk):
         params = [
             ("Workers", 2),
             ("MS1 ppm tol", 10),
-            ("MS1 m/z min", 400),
-            ("MS1 m/z max", 2000),
             ("MS2 intensity", 1e2),
             ("Fragment mass tol", 0.02),
             ("Max cleavages", 2),
             ("Smoothing window", 5),
-            ("Mass offset", 0.0),
-            ("m/z offset", 0.0),
             ("AUC rel. height", 0.7),
         ]
         self._param_vars = {}
@@ -180,18 +180,16 @@ class PipelineGUI(tk.Tk):
         # Bind param vars to existing attributes
         self.n_workers = self._param_vars["Workers"]
         self.ppm_ms1_tol = self._param_vars["MS1 ppm tol"]
-        self.mz_min = self._param_vars["MS1 m/z min"]
-        self.mz_max = self._param_vars["MS1 m/z max"]
         self.intensity_threshold = self._param_vars["MS2 intensity"]
         self.fragment_mass_tol = self._param_vars["Fragment mass tol"]
         self.fragment_max_cleavages = self._param_vars["Max cleavages"]
         self.smoothing_window = self._param_vars["Smoothing window"]
-        self.mass_offset = self._param_vars["Mass offset"]
-        self.mz_offset = self._param_vars["m/z offset"]
         self.rel_height = self._param_vars["AUC rel. height"]
 
+        selector_row = base_row + (len(params) + 2) // 3
+
         # Smoothing method selector
-        ttk.Label(params_frame, text="Smoothing method").grid(column=0, row=base_row + 4, sticky="w", padx=8, pady=6)
+        ttk.Label(params_frame, text="Smoothing method").grid(column=0, row=selector_row, sticky="w", padx=8, pady=6)
         self.smoothing_method = tk.StringVar(value="gaussian")
         ttk.Combobox(
             params_frame,
@@ -199,10 +197,10 @@ class PipelineGUI(tk.Tk):
             values=["gaussian", "savgol"],
             state="readonly",
             width=12
-        ).grid(column=1, row=base_row + 4, padx=8, pady=6, sticky="w")
+        ).grid(column=1, row=selector_row, padx=8, pady=6, sticky="w")
 
         # AUC rel-height mode selector
-        ttk.Label(params_frame, text="AUC rel height mode").grid(column=2, row=base_row + 4, sticky="w", padx=8, pady=6)
+        ttk.Label(params_frame, text="AUC rel height mode").grid(column=2, row=selector_row, sticky="w", padx=8, pady=6)
         self.rel_height_mode = tk.StringVar(value="prominence")
         ttk.Combobox(
             params_frame,
@@ -210,12 +208,18 @@ class PipelineGUI(tk.Tk):
             values=["prominence", "height"],
             state="readonly",
             width=12
-        ).grid(column=3, row=base_row + 4, padx=8, pady=6, sticky="w")
+        ).grid(column=3, row=selector_row, padx=8, pady=6, sticky="w")
 
-        ttk.Label(params_frame, text="Fragment ion series").grid(column=4, row=base_row + 4, sticky="w", padx=8, pady=6)
+        ttk.Label(params_frame, text="Fragment ion series").grid(column=4, row=selector_row, sticky="w", padx=8, pady=6)
         self.fragment_ion_series = tk.StringVar(value="ABCXYZ")
         ttk.Entry(params_frame, textvariable=self.fragment_ion_series, width=14) \
-            .grid(column=5, row=base_row + 4, padx=8, pady=6, sticky="w")
+            .grid(column=5, row=selector_row, padx=8, pady=6, sticky="w")
+        row += 1
+
+        # Optional mass corrections
+        optional_frame = section("Optional")
+        self.mz_offset = add_label_entry("m/z offset", 0.0, 1, 0, optional_frame)
+        self.mass_offset = add_label_entry("Mass offset", 0.0, 1, 2, optional_frame)
         row += 1
 
         # Toggles
@@ -308,19 +312,17 @@ class PipelineGUI(tk.Tk):
         if d:
             self.out_dir.set(d)
 
-    def _choose_precursor_db(self):
+    def _choose_database(self):
         path = filedialog.askopenfilename(
             filetypes=[("Database files", "*.csv *.xlsx *.xls"), ("All files", "*.*")]
         )
         if path:
-            self.precursor_db_path.set(path)
-
-    def _choose_structure_db(self):
-        path = filedialog.askopenfilename(
-            filetypes=[("Database files", "*.csv *.xlsx *.xls"), ("All files", "*.*")]
-        )
-        if path:
-            self.structure_db_path.set(path)
+            try:
+                validate_glycan_database(path)
+            except (FileNotFoundError, ValueError, OSError, ImportError) as exc:
+                messagebox.showerror("Database error", str(exc))
+                return
+            self.database_path.set(path)
 
     def _on_run(self):
         # gather parameters
@@ -329,12 +331,9 @@ class PipelineGUI(tk.Tk):
                 "input_files": self.selected_files,
                 "input_dir": None,
                 "output_root": self.out_dir.get(),
-                "precursor_db_path": self.precursor_db_path.get().strip() or None,
-                "structure_db_path": self.structure_db_path.get().strip() or None,
+                "database_path": self.database_path.get().strip() or None,
                 "n_workers": int(self.n_workers.get()),
                 "ppm_ms1_tol": float(self.ppm_ms1_tol.get()),
-                "mz_min": float(self.mz_min.get()),
-                "mz_max": float(self.mz_max.get()),
                 "intensity_threshold": float(self.intensity_threshold.get()),
                 "fragment_mass_tol": float(self.fragment_mass_tol.get()),
                 "fragment_ion_series": self.fragment_ion_series.get(),
@@ -373,13 +372,12 @@ class PipelineGUI(tk.Tk):
         if not os.path.isdir(params["output_root"]):
             messagebox.showerror("Output error", "Output directory does not exist")
             return
-        for label, key in [("Precursor DB", "precursor_db_path"), ("Structure DB", "structure_db_path")]:
-            if params[key] and not os.path.isfile(params[key]):
-                messagebox.showerror("Input error", f"{label} does not exist: {params[key]}")
+        if params["database_path"]:
+            try:
+                validate_glycan_database(params["database_path"])
+            except (FileNotFoundError, ValueError, OSError, ImportError) as exc:
+                messagebox.showerror("Database error", str(exc))
                 return
-        if params["mz_min"] >= params["mz_max"]:
-            messagebox.showerror("Parameter error", "MS1 m/z min must be < m/z max")
-            return
         if params["n_workers"] <= 0:
             params["n_workers"] = os.cpu_count() or 1
         if params["n_workers"] > 61:
@@ -387,6 +385,9 @@ class PipelineGUI(tk.Tk):
         if params["fragment_max_cleavages"] < 1:
             messagebox.showerror("Parameter error", "Max cleavages must be >= 1")
             return
+        database_path = params.pop("database_path")
+        params["precursor_db_path"] = database_path
+        params["structure_db_path"] = database_path
         self.status_var.set(f"Running... files={len(params['input_files'])}, workers={params['n_workers']}")
 
         self._save_prefs()
@@ -564,12 +565,9 @@ class PipelineGUI(tk.Tk):
     def _save_prefs(self):
         prefs = {
             "output_root": self.out_dir.get(),
-            "precursor_db_path": self.precursor_db_path.get(),
-            "structure_db_path": self.structure_db_path.get(),
+            "database_path": self.database_path.get(),
             "n_workers": self.n_workers.get(),
             "ppm_ms1_tol": self.ppm_ms1_tol.get(),
-            "mz_min": self.mz_min.get(),
-            "mz_max": self.mz_max.get(),
             "intensity_threshold": self.intensity_threshold.get(),
             "fragment_mass_tol": self.fragment_mass_tol.get(),
             "fragment_ion_series": self.fragment_ion_series.get(),
@@ -604,15 +602,11 @@ class PipelineGUI(tk.Tk):
             return
         if "output_root" in prefs:
             self.out_dir.set(prefs["output_root"])
-        if "precursor_db_path" in prefs:
-            self.precursor_db_path.set(prefs["precursor_db_path"])
-        if "structure_db_path" in prefs:
-            self.structure_db_path.set(prefs["structure_db_path"])
+        if "database_path" in prefs:
+            self.database_path.set(prefs["database_path"])
         for key, var in [
             ("n_workers", self.n_workers),
             ("ppm_ms1_tol", self.ppm_ms1_tol),
-            ("mz_min", self.mz_min),
-            ("mz_max", self.mz_max),
             ("intensity_threshold", self.intensity_threshold),
             ("fragment_mass_tol", self.fragment_mass_tol),
             ("fragment_ion_series", self.fragment_ion_series),

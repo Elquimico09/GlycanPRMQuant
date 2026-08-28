@@ -9,8 +9,6 @@ from glycanPRMQuant.logging_utils import configure_logging
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ppm-ms1-tol", type=float, default=10)
-    parser.add_argument("--mz-min", type=float, default=400)
-    parser.add_argument("--mz-max", type=float, default=2000)
     parser.add_argument("--mz-offset", type=float, default=0.0)
     parser.add_argument("--mass-offset", type=float, default=0.0)
     parser.add_argument("--intensity-threshold", type=float, default=1e2)
@@ -46,8 +44,6 @@ def _run_one(args: argparse.Namespace) -> int:
         mzml_file=args.input_file,
         output_dir=args.output_dir,
         ppm_ms1_tol=args.ppm_ms1_tol,
-        mz_min=args.mz_min,
-        mz_max=args.mz_max,
         mz_offset=args.mz_offset,
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,
@@ -78,8 +74,6 @@ def _run_batch(args: argparse.Namespace) -> int:
         output_root=args.output_root,
         n_workers=args.workers,
         ppm_ms1_tol=args.ppm_ms1_tol,
-        mz_min=args.mz_min,
-        mz_max=args.mz_max,
         mz_offset=args.mz_offset,
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,

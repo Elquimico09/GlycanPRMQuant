@@ -120,7 +120,13 @@ def _calculate_precursor_masses(raw_db: pd.DataFrame) -> pd.DataFrame:
     return db
 
 
-def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_offset=0.0, db_path=None):
+def matchMS1(
+    ms1_data,
+    ppm_tol=10,
+    mz_offset=0.0,
+    mass_offset=0.0,
+    db_path=None,
+):
     """
     Match MS1 data with glycan database by computing adduct m/z values
     from calculated or precomputed neutral masses. Supports +2H, +3H, +4H,
@@ -128,8 +134,6 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
 
     :param ms1_data: DataFrame containing MS1 data with 'precursor_mz' column.
     :param ppm_tol: Mass tolerance in parts per million.
-    :param mz_min: Minimum m/z value to consider.
-    :param mz_max: Maximum m/z value to consider.
     :param mz_offset: Amount (in Da) to add to all calculated adduct m/z values.
     :param mass_offset: Amount (in Da) to add to neutral masses in database.
     :param db_path: Path to glycan database CSV/Excel file. If None, uses default.
@@ -152,14 +156,7 @@ def matchMS1(ms1_data, ppm_tol=10, mz_min=400, mz_max=2000, mz_offset=0.0, mass_
         'mz_2NH4':  '2NH4'
     }
 
-    # Filter MS1 data to m/z range
-    ms1 = ms1_data[
-        (ms1_data['precursor_mz'] >= mz_min) &
-        (ms1_data['precursor_mz'] <= mz_max)
-    ]
-    logger.info(f"Filtered MS1 to {len(ms1)} scans in {mz_min}-{mz_max} m/z")
-
-    unique_prec = ms1['precursor_mz'].unique()
+    unique_prec = ms1_data['precursor_mz'].unique()
     logger.info(f"{len(unique_prec)} unique precursor m/z values to match")
 
     matches = []

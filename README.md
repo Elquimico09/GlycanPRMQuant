@@ -47,8 +47,8 @@ programmatically from Python.
 - `glycanPRMQuant/parallelProcess.py`  
   Parallel multi-file runner used by the GUI and programmatic batch workflows.
 - `glycanPRMQuant/pipelineGUI.py`  
-  Tkinter GUI for selecting input files, output folder, matching parameters,
-  plotting options, DB overrides, and batch execution.
+  Tkinter GUI for selecting input files, output folder, a shared glycan
+  database, matching parameters, plotting options, and batch execution.
 - `glycanPRMQuant/matchMS1.py`  
   Precursor matching. Uses the N-glycan database by default and calculates
   neutral masses from grouped IUPAC compositions.
@@ -165,8 +165,10 @@ In the GUI:
 1. Select one or more Thermo `.raw` files or `.mzML` files. Do not mix formats
    within one batch.
 2. Select an output folder.
-3. Optionally provide custom precursor/structure DB files. Leave blank to use
-   the bundled `N_glycan_db.csv`.
+3. Optionally select a custom glycan database. Leave the field blank to use the
+   bundled `N_glycan_db.csv`. One custom database is used for both precursor
+   and fragment matching and must contain nonblank `Condensed IUPAC`,
+   `Composition`, and `Numerical Composition` columns.
 4. Set MS1/MS2 tolerances and intensity thresholds.
 5. Set fragment options:
    - `Fragment ion series`: any combination of `A`, `B`, `C`, `X`, `Y`, `Z`.
@@ -232,8 +234,6 @@ process_mzml_pipeline(
     mzml_file="path/to/sample.raw",
     output_dir="path/to/output_dir",
     ppm_ms1_tol=10,
-    mz_min=400,
-    mz_max=2000,
     intensity_threshold=1e2,
     fragment_mass_tol=0.02,
     fragment_ion_series="BY",
@@ -342,7 +342,6 @@ The returned rows are restricted to the selected best-scoring IUPAC and include:
 
 - `ppm_ms1_tol`: tolerance in ppm for precursor database matching and for
   associating MS2 scans with matched precursors.
-- `mz_min`, `mz_max`: precursor m/z search range.
 - `mz_offset`: offset applied to calculated precursor adduct m/z values.
 - `mass_offset`: offset applied to neutral masses before precursor adduct
   calculation.

@@ -294,8 +294,6 @@ def process_mzml_pipeline(
     mzml_file: str,
     output_dir: str,
     ppm_ms1_tol: float = 10,
-    mz_min: float = 400,
-    mz_max: float = 2000,
     mz_offset: float = 0.0,
     mass_offset: float = 0.0,
     intensity_threshold: float = 1e2,
@@ -336,8 +334,6 @@ def process_mzml_pipeline(
     ms1_results = matchMS1(
         ms2_data,
         ppm_tol=ppm_ms1_tol,
-        mz_min=mz_min,
-        mz_max=mz_max,
         mz_offset=mz_offset,
         mass_offset=mass_offset,
         db_path=precursor_db_path

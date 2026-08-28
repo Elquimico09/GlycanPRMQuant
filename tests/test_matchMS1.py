@@ -29,7 +29,7 @@ def test_calculate_precursor_masses_groups_by_composition(monkeypatch):
 
 def test_matchms1_matches_precomputed_database(tmp_path):
     ms1_module._DB_CACHE.clear()
-    neutral_mass = 1000.0
+    neutral_mass = 500.0
     precursor_mz = (neutral_mass + 2 * PROTON_MASS) / 2
     db_path = tmp_path / "precursors.csv"
     pd.DataFrame({"Composition": ["25000"], "[M]": [neutral_mass]}).to_csv(db_path, index=False)
@@ -38,11 +38,10 @@ def test_matchms1_matches_precomputed_database(tmp_path):
     matched = ms1_module.matchMS1(
         ms1_data,
         ppm_tol=10,
-        mz_min=400,
-        mz_max=2000,
         db_path=str(db_path),
     )
 
     assert len(matched) == 1
     assert matched.iloc[0]["Glycan"] == "25000"
     assert matched.iloc[0]["Adduct"] == "2H"
+    assert matched.iloc[0]["precursor_mz"] < 400

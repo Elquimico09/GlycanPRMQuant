@@ -8,8 +8,7 @@ There are two major feature areas:
 
 1) **PRM quantification pipeline**
    - Read mzML data
-   - Match MS1 precursors against a glycan mass database
-   - Match MS2 fragments against a fragment database
+   - Match MS1 precursors and MS2 fragments against one glycan IUPAC database
    - Plot chromatograms and spectra
    - Compute AUC values for each glycan
    - Optionally batch process multiple Thermo RAW or mzML files in parallel
@@ -22,7 +21,7 @@ There are two major feature areas:
 ## Repo layout
 
 - `glycanPRMQuant/`  Package source
-- `database/`        Precursor and fragment reference tables
+- `database/`        Shared glycan IUPAC reference table
 - `fragments/`       Example fragment images (used in docs or demos)
 - `tests/`           Unit tests for core functions
 - `demo_glycan_visualization.py`  Standalone demo for glycan visualization
@@ -58,7 +57,6 @@ Key pieces:
 - Constants in `glycanPRMQuant/constants.py` define proton and ammonium masses.
 - `_load_precursor_db` reads `database/glycan_precursor_mz_list.xlsx` and computes adduct m/z columns.
 - `matchMS1`:
-  - Filters precursors to `mz_min`/`mz_max`.
   - Computes ppm tolerance per precursor.
   - Finds database rows where adduct m/z is within tolerance.
   - Returns a DataFrame with `precursor_mz`, `Glycan`, `Adduct`, `database_mz`, `ppm_error`.
@@ -239,10 +237,13 @@ Tkinter GUI with two tabs:
 
 ## Databases and static inputs
 
-- `database/glycan_precursor_mz_list.xlsx` is the MS1 precursor database used by `matchMS1`.
-- `database/fragment_database.csv` is the fragment database used by `matchMS2`.
+- `database/N_glycan_db.csv` is the shared database used for both MS1 precursor
+  matching and MS2 fragment generation. The GUI uses it when the optional custom
+  database field is blank. A custom database must have nonblank `Condensed
+  IUPAC`, `Composition`, and `Numerical Composition` columns.
 
-If you add new glycans or fragments, update these files. You may also need to update adduct logic to keep matching consistent.
+If you add new glycans, update this file. You may also need to update adduct
+logic to keep matching consistent.
 
 ## Tests
 
