@@ -157,66 +157,24 @@ class PipelineGUI(tk.Tk):
         ).grid(column=1, row=4, columnspan=3, padx=8, pady=(0, 6), sticky="w")
         row += 1
 
-        # Numeric parameters arranged in 3 columns
+        # Keep related acquisition, fragment, smoothing, and AUC controls
+        # together instead of filling the grid strictly by input type.
         params_frame = section("Processing Parameters")
-        params = [
-            ("Workers", 2),
-            ("MS1 ppm tol", 10),
-            ("MS2 intensity", 1e2),
-            ("Fragment tolerance value", 0.02),
-            ("Max cleavages", 2),
-            ("Smoothing window", 5),
-            ("AUC rel. height", 0.7),
-        ]
         self._param_vars = {}
-        base_row = 1
-        for i, (label, default) in enumerate(params):
-            r = base_row + i // 3
-            c = (i % 3) * 2
-            var = add_label_entry(label, default, r, c, params_frame)
-            self._param_vars[label] = var
-        row += 1
 
-        # Bind param vars to existing attributes
-        self.n_workers = self._param_vars["Workers"]
-        self.ppm_ms1_tol = self._param_vars["MS1 ppm tol"]
-        self.intensity_threshold = self._param_vars["MS2 intensity"]
-        self.fragment_mass_tol = self._param_vars["Fragment tolerance value"]
-        self.fragment_max_cleavages = self._param_vars["Max cleavages"]
-        self.smoothing_window = self._param_vars["Smoothing window"]
-        self.rel_height = self._param_vars["AUC rel. height"]
+        # General processing controls.
+        self.n_workers = add_label_entry("Workers", 2, 1, 0, params_frame)
+        self.ppm_ms1_tol = add_label_entry("MS1 ppm tol", 10, 1, 2, params_frame)
+        self.intensity_threshold = add_label_entry(
+            "MS2 intensity", 1e2, 1, 4, params_frame
+        )
 
-        selector_row = base_row + (len(params) + 2) // 3
-
-        # Smoothing method selector
-        ttk.Label(params_frame, text="Smoothing method").grid(column=0, row=selector_row, sticky="w", padx=8, pady=6)
-        self.smoothing_method = tk.StringVar(value="gaussian")
-        ttk.Combobox(
-            params_frame,
-            textvariable=self.smoothing_method,
-            values=["gaussian", "savgol"],
-            state="readonly",
-            width=12
-        ).grid(column=1, row=selector_row, padx=8, pady=6, sticky="w")
-
-        # AUC rel-height mode selector
-        ttk.Label(params_frame, text="AUC rel height mode").grid(column=2, row=selector_row, sticky="w", padx=8, pady=6)
-        self.rel_height_mode = tk.StringVar(value="prominence")
-        ttk.Combobox(
-            params_frame,
-            textvariable=self.rel_height_mode,
-            values=["prominence", "height"],
-            state="readonly",
-            width=12
-        ).grid(column=3, row=selector_row, padx=8, pady=6, sticky="w")
-
-        ttk.Label(params_frame, text="Fragment ion series").grid(column=4, row=selector_row, sticky="w", padx=8, pady=6)
-        self.fragment_ion_series = tk.StringVar(value="ABCXYZ")
-        ttk.Entry(params_frame, textvariable=self.fragment_ion_series, width=14) \
-            .grid(column=5, row=selector_row, padx=8, pady=6, sticky="w")
-
+        # Fragment-generation and fragment-matching controls.
+        self.fragment_mass_tol = add_label_entry(
+            "Fragment tolerance value", 0.02, 2, 0, params_frame
+        )
         ttk.Label(params_frame, text="Fragment tolerance unit").grid(
-            column=0, row=selector_row + 1, sticky="w", padx=8, pady=6
+            column=2, row=2, sticky="w", padx=8, pady=6
         )
         self.fragment_mass_tol_unit = tk.StringVar(value="Da")
         ttk.Combobox(
@@ -225,8 +183,61 @@ class PipelineGUI(tk.Tk):
             values=["Da", "ppm"],
             state="readonly",
             width=12,
-        ).grid(
-            column=1, row=selector_row + 1, padx=8, pady=6, sticky="w"
+        ).grid(column=3, row=2, padx=8, pady=6, sticky="w")
+
+        ttk.Label(params_frame, text="Fragment ion series").grid(
+            column=4, row=2, sticky="w", padx=8, pady=6
+        )
+        self.fragment_ion_series = tk.StringVar(value="ABCXYZ")
+        ttk.Entry(
+            params_frame, textvariable=self.fragment_ion_series, width=14
+        ).grid(column=5, row=2, padx=8, pady=6, sticky="w")
+        self.fragment_max_cleavages = add_label_entry(
+            "Max cleavages", 2, 3, 4, params_frame
+        )
+
+        # Chromatogram smoothing controls.
+        self.smoothing_window = add_label_entry(
+            "Smoothing window", 5, 4, 0, params_frame
+        )
+        ttk.Label(params_frame, text="Smoothing method").grid(
+            column=2, row=4, sticky="w", padx=8, pady=6
+        )
+        self.smoothing_method = tk.StringVar(value="gaussian")
+        ttk.Combobox(
+            params_frame,
+            textvariable=self.smoothing_method,
+            values=["gaussian", "savgol"],
+            state="readonly",
+            width=12
+        ).grid(column=3, row=4, padx=8, pady=6, sticky="w")
+
+        # AUC boundary controls.
+        self.rel_height = add_label_entry(
+            "AUC rel. height", 0.7, 5, 0, params_frame
+        )
+        ttk.Label(params_frame, text="AUC rel height mode").grid(
+            column=2, row=5, sticky="w", padx=8, pady=6
+        )
+        self.rel_height_mode = tk.StringVar(value="prominence")
+        ttk.Combobox(
+            params_frame,
+            textvariable=self.rel_height_mode,
+            values=["prominence", "height"],
+            state="readonly",
+            width=12
+        ).grid(column=3, row=5, padx=8, pady=6, sticky="w")
+
+        self._param_vars.update(
+            {
+                "Workers": self.n_workers,
+                "MS1 ppm tol": self.ppm_ms1_tol,
+                "MS2 intensity": self.intensity_threshold,
+                "Fragment tolerance value": self.fragment_mass_tol,
+                "Max cleavages": self.fragment_max_cleavages,
+                "Smoothing window": self.smoothing_window,
+                "AUC rel. height": self.rel_height,
+            }
         )
         row += 1
 
