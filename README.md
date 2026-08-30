@@ -406,7 +406,10 @@ composition scorer:
 7. Uses chromatographic coherence only when it is evaluable for every candidate
    in a contested feature. If any candidate is missing it, every candidate gets
    the same neutral coelution component.
-8. Searches a paired charge/adduct-matched shifted-fragment decoy library,
+8. Requires the chromatographic apex to have at least two acquired scans on
+   both its rising and falling flanks. Boundary or sparsely sampled features
+   remain auditable but are not eligible for assignment or quantification.
+9. Searches a paired charge/adduct-matched shifted-fragment decoy library,
    performs feature-level target-decoy competition, and estimates assignment
    FDRs and q-values.
 
@@ -462,12 +465,14 @@ more than both 2 ppm and four calibrated sigmas. The decision is recorded in
 no candidate in a contested feature has a distinguishing fragment, the feature
 receives `no_discriminating_fragment_evidence` and no winner is selected.
 
-Every assignment, including an uncontested feature, must pass the minimum
-fragment, explained-intensity, and bounded-score checks. Contested assignments
-must additionally pass the discriminative-difference rule. Otherwise they
-receive `insufficient_evidence`, `ambiguous`, `possible_coisolation`, or
-`no_discriminating_fragment_evidence` and remain unselected. A sole surviving
-candidate after audited pruning is reported as `resolved_after_mass_pruning`.
+Every assignment, including an uncontested feature, must contain an interior,
+adequately sampled chromatographic apex and pass the minimum fragment,
+explained-intensity, and bounded-score checks. Contested assignments must
+additionally pass the discriminative-difference rule. Otherwise they receive
+`no_chromatographic_peak`, `insufficient_evidence`, `ambiguous`,
+`possible_coisolation`, or `no_discriminating_fragment_evidence` and remain
+unselected. A sole surviving candidate after audited pruning is reported as
+`resolved_after_mass_pruning`.
 
 For target-decoy validation, each target product ion receives a reproducible
 random neutral-mass shift between 1 and 30 Da; the m/z shift is divided by ion
@@ -561,6 +566,8 @@ it has the largest AUC. Alternative peak groups are retained in audit tables.
   library; default `True`.
 - `candidate_max_q_value`: maximum assignment q-value; default `0.05`.
 - `target_decoy_seed`: reproducible decoy-generation seed; default `1729`.
+- `minimum_peak_flank_scans`: minimum acquired scans required before and after
+  a feature apex for assignment and quantification; programmatic default `2`.
 - `enable_consensus_peak_selection`: align and choose one reproducible peak
   group per glycan across a multi-file batch; default `True`.
 - `consensus_rt_tolerance`: allowed absolute difference between an aligned peak
@@ -582,7 +589,8 @@ Each sample output directory can include:
   Candidate-level component scores, RT-feature boundaries, runner-up metrics,
   precursor calibration and pruning audit fields, coelution comparability,
   discriminative evidence, selected tolerance and equivalent ppm, mass-accuracy
-  reliability/effective weights, `reported`/`selected` flags, quantification
+  reliability/effective weights, feature scan/flank counts,
+  `chromatographic_peak_valid`, `reported`/`selected` flags, quantification
   weight, and resolution status for every composition considered. Here,
   `selected=True` specifically means that the candidate is eligible for
   composition-level quantification.

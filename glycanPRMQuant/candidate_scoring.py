@@ -41,6 +41,7 @@ class CandidateScoringConfig:
     coisolation_score: float = 0.75
     feature_smoothing_sigma: float = 1.0
     feature_prominence_fraction: float = 0.10
+    minimum_peak_flank_scans: int = 2
 
     def __post_init__(self):
         tolerance_value, tolerance_unit = validate_tolerance(
@@ -83,6 +84,8 @@ class CandidateScoringConfig:
             raise ValueError("Precursor log-likelihood weight must be positive")
         if self.mass_outlier_min_delta_ppm < 0 or self.mass_outlier_sigma_multiplier <= 0:
             raise ValueError("Mass-outlier thresholds must be non-negative")
+        if self.minimum_peak_flank_scans < 1:
+            raise ValueError("Minimum peak flank scans must be at least 1")
 
 
 @dataclass
@@ -250,6 +253,12 @@ def _assign_rt_features(
             feature_signal = np.asarray(signal)[mask]
             feature_rt = sub.loc[mask, "rt"].to_numpy(dtype=float)
             apex_index = int(np.argmax(feature_signal)) if feature_signal.size else 0
+            left_flank_scans = apex_index
+            right_flank_scans = max(int(feature_signal.size) - apex_index - 1, 0)
+            chromatographic_peak_valid = bool(
+                left_flank_scans >= config.minimum_peak_flank_scans
+                and right_flank_scans >= config.minimum_peak_flank_scans
+            )
             summaries.append(
                 {
                     "_precursor_cluster": int(cluster),
@@ -258,6 +267,17 @@ def _assign_rt_features(
                     "feature_apex_rt": float(feature_rt[apex_index]),
                     "feature_end_rt": float(np.max(feature_rt)),
                     "feature_reference": "precursor" if use_precursor else "ms2_tic",
+                    "feature_scan_count": int(feature_signal.size),
+                    "feature_apex_scan_index": apex_index,
+                    "feature_left_flank_scans": left_flank_scans,
+                    "feature_right_flank_scans": right_flank_scans,
+                    "minimum_peak_flank_scans": config.minimum_peak_flank_scans,
+                    "chromatographic_peak_valid": chromatographic_peak_valid,
+                    "chromatographic_peak_rejection_reason": (
+                        ""
+                        if chromatographic_peak_valid
+                        else "apex_lacks_required_scans_on_both_flanks"
+                    ),
                 }
             )
         feature_offset += int(local_labels.max()) + 1 if local_labels.size else 1
@@ -704,6 +724,14 @@ def _finalize_candidate_scores(
     finalized = scores.copy()
     keys = ["_precursor_cluster", "_rt_feature"]
 
+    # Hand-built score tables used by programmatic callers may predate the
+    # chromatographic gate. Production scores always receive these fields from
+    # _assign_rt_features; missing fields remain backward-compatible.
+    if "chromatographic_peak_valid" not in finalized.columns:
+        finalized["chromatographic_peak_valid"] = True
+    if "chromatographic_peak_rejection_reason" not in finalized.columns:
+        finalized["chromatographic_peak_rejection_reason"] = ""
+
     if "fragment_mass_accuracy_reliability" not in finalized.columns:
         representative_mz = 500.0
         equivalent_ppm, reliability = mass_accuracy_reliability(
@@ -870,12 +898,23 @@ def _finalize_candidate_scores(
         & valid_delta
         & (delta > outlier_threshold)
     )
-    finalized["candidate_rejection_reason"] = np.where(
-        finalized["mass_outlier_pruned"],
-        "no_specific_evidence_and_precursor_mass_outlier",
-        "",
+    invalid_chromatographic_peak = ~finalized[
+        "chromatographic_peak_valid"
+    ].fillna(False).astype(bool)
+    finalized["candidate_rejection_reason"] = np.select(
+        [
+            invalid_chromatographic_peak,
+            finalized["mass_outlier_pruned"],
+        ],
+        [
+            "no_interior_chromatographic_apex",
+            "no_specific_evidence_and_precursor_mass_outlier",
+        ],
+        default="",
     )
-    finalized["eligible_for_resolution"] = ~finalized["mass_outlier_pruned"]
+    finalized["eligible_for_resolution"] = ~(
+        finalized["mass_outlier_pruned"] | invalid_chromatographic_peak
+    )
     return finalized
 
 
@@ -911,6 +950,12 @@ def _apply_resolution(
         )
         ordered = pd.concat([active_ordered, pruned_ordered])
         scored.loc[ordered.index, "candidate_rank"] = np.arange(1, len(ordered) + 1)
+        if not bool(feature["chromatographic_peak_valid"].fillna(False).all()):
+            scored.loc[ordered.index, "resolution_status"] = (
+                "no_chromatographic_peak"
+            )
+            scored.loc[ordered.index, "selected"] = False
+            continue
         if len(ordered) == 1:
             only_index = ordered.index[0]
             only = scored.loc[only_index]
@@ -1267,6 +1312,14 @@ def score_and_resolve_candidates(
         "feature_start_rt",
         "feature_apex_rt",
         "feature_end_rt",
+        "feature_reference",
+        "feature_scan_count",
+        "feature_apex_scan_index",
+        "feature_left_flank_scans",
+        "feature_right_flank_scans",
+        "minimum_peak_flank_scans",
+        "chromatographic_peak_valid",
+        "chromatographic_peak_rejection_reason",
     ]
     annotated = work.merge(
         scores[merge_columns],

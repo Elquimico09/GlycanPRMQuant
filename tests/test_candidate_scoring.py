@@ -74,6 +74,71 @@ def test_default_minimum_explained_intensity_is_one_percent():
     assert CandidateScoringConfig().minimum_explained_intensity == 0.01
 
 
+def test_interior_apex_requires_two_scans_on_each_flank():
+    profile = [10, 50, 100, 50, 10]
+    rows = _candidate_rows("25000", [101.0, 201.0], [profile, profile])
+
+    result = score_and_resolve_candidates(
+        pd.DataFrame(rows), _scan_table(profile), _permissive_config()
+    )
+    score = result.candidate_scores.iloc[0]
+
+    assert score["chromatographic_peak_valid"]
+    assert score["feature_left_flank_scans"] == 2
+    assert score["feature_right_flank_scans"] == 2
+    assert score["minimum_peak_flank_scans"] == 2
+    assert set(result.resolved_rows["Glycan"]) == {"25000"}
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        [100, 80, 60, 40, 20],
+        [20, 40, 60, 80, 100],
+    ],
+)
+def test_endpoint_apex_is_reported_but_rejected(profile):
+    rows = _candidate_rows("88000", [101.0, 201.0], [profile, profile])
+
+    result = score_and_resolve_candidates(
+        pd.DataFrame(rows), _scan_table(profile), _permissive_config()
+    )
+    score = result.candidate_scores.iloc[0]
+
+    assert not score["chromatographic_peak_valid"]
+    assert score["chromatographic_peak_rejection_reason"] == (
+        "apex_lacks_required_scans_on_both_flanks"
+    )
+    assert score["candidate_rejection_reason"] == (
+        "no_interior_chromatographic_apex"
+    )
+    assert score["resolution_status"] == "no_chromatographic_peak"
+    assert not score["selected"]
+    assert result.resolved_rows.empty
+    assert not result.reported_rows.empty
+
+
+def test_interior_apex_with_only_one_left_scan_is_rejected():
+    profile = [10, 100, 50, 10]
+    rows = _candidate_rows("25000", [101.0, 201.0], [profile, profile])
+
+    result = score_and_resolve_candidates(
+        pd.DataFrame(rows), _scan_table(profile), _permissive_config()
+    )
+    score = result.candidate_scores.iloc[0]
+
+    assert score["feature_left_flank_scans"] == 1
+    assert score["feature_right_flank_scans"] == 2
+    assert not score["chromatographic_peak_valid"]
+    assert score["resolution_status"] == "no_chromatographic_peak"
+    assert result.resolved_rows.empty
+
+
+def test_minimum_peak_flank_scan_validation():
+    with pytest.raises(ValueError, match="flank scans"):
+        CandidateScoringConfig(minimum_peak_flank_scans=0)
+
+
 def test_repeated_rows_do_not_inflate_candidate_score():
     profile = [10, 50, 100, 50, 10]
     rows = _candidate_rows("25000", [101.0, 201.0], [profile, profile])
@@ -222,7 +287,9 @@ def test_rt_features_keep_isobaric_candidates_at_different_elution_times():
     result = score_and_resolve_candidates(
         pd.DataFrame(rows),
         _scan_table(precursor_profile),
-        _permissive_config(),
+        # This test isolates RT-feature separation. The default two-flank-scan
+        # quantification gate is tested independently above.
+        _permissive_config(minimum_peak_flank_scans=1),
     )
 
     assert result.candidate_scores["rt_feature_id"].nunique() == 2
