@@ -326,6 +326,12 @@ The output includes:
 structures, generates theoretical fragments, and matches observed fragments by
 m/z tolerance.
 
+Protonated `+H` and `+2H` product ions are considered for every precursor.
+For an `H+NH4` precursor assignment, `+NH4` and `+H+NH4` product ions are also
+considered. For a `2NH4` precursor assignment, `+NH4` and `+2NH4` product ions
+are also considered. Product-ion matching is restricted to the adduct forms
+allowed by that scan's assigned precursor adduct.
+
 For each theoretical fragment whose substructure contains NeuAc, matching also
 includes a methanol neutral-loss variant (`-CH3OH`). The neutral mass loss is
 32.026215 Da, so the fragment m/z shift is divided by its charge.

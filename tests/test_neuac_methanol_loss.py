@@ -22,7 +22,7 @@ def _fragment_database():
 
 
 def test_neuac_fragments_include_charge_aware_methanol_loss():
-    ions = ms2_module._build_adduct_table(_fragment_database(), COMPOSITION)
+    ions = ms2_module._build_adduct_table(_fragment_database(), ["2H"])
     losses = ions.loc[ions["neutral_loss"].eq("CH3OH")]
     intact = ions.loc[ions["neutral_loss"].eq("")]
 
@@ -59,7 +59,7 @@ def test_methanol_loss_annotation_is_retained_in_match(tmp_path):
         ion_series="BY",
         max_cleavages=1,
     )
-    ions = ms2_module._build_adduct_table(fragment_db, COMPOSITION)
+    ions = ms2_module._build_adduct_table(fragment_db, ["2H"])
     loss = ions.loc[
         ions["neutral_loss"].eq("CH3OH") & ions["Charge"].eq(1)
     ].iloc[0]
