@@ -6,7 +6,7 @@ import numpy as np
 from glycanPRMQuant.spectra import extract_ms2
 from glycanPRMQuant.matchMS1     import matchMS1
 from glycanPRMQuant.matchMS2     import matchMS2
-from glycanPRMQuant.calculateAUC import calculateAUC
+from glycanPRMQuant.calculateAUC import calculateAUC, calculate_feature_auc
 from glycanPRMQuant.candidate_scoring import (
     CandidateScoringConfig,
     score_and_resolve_candidates,
@@ -593,6 +593,24 @@ def process_mzml_pipeline(
         auc_adduct_path = os.path.join(output_dir, f"{base_name}_auc_values_by_adduct.csv")
         per_adduct_df.to_csv(auc_adduct_path, index=False)
         logger.info(f"Wrote per-adduct AUC values to {auc_adduct_path}")
+
+        feature_auc_df = calculate_feature_auc(
+            all_df,
+            smoothing_window=effective_window,
+            smoothing_method=smoothing_method,
+            adduct_col="PrecursorAdduct",
+            rel_height=rel_height,
+            rel_height_mode=rel_height_mode,
+        )
+        feature_auc_path = os.path.join(
+            output_dir, f"{base_name}_feature_auc_values.csv"
+        )
+        feature_auc_df.to_csv(feature_auc_path, index=False)
+        logger.info(
+            "Wrote %d independently quantified chromatographic feature(s) to %s",
+            len(feature_auc_df),
+            feature_auc_path,
+        )
 
         # Compute total-window boundaries for shaded AUC plots
         total_window_df = _compute_total_window_boundaries(

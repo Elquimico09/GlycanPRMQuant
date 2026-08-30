@@ -266,6 +266,25 @@ class PipelineGUI(tk.Tk):
         self.candidate_max_q_value = self._scoring_vars["Maximum assignment q-value"]
         row += 1
 
+        consensus_frame = section("Cross-run Peak Consensus")
+        self.consensus_rt_tolerance = add_label_entry(
+            "Peak ΔRT tolerance (± min)", 0.3, 1, 0, consensus_frame
+        )
+        self.consensus_min_replicate_fraction = add_label_entry(
+            "Minimum run coverage", 0.8, 1, 2, consensus_frame
+        )
+        ttk.Label(
+            consensus_frame,
+            text=(
+                "Peaks are matched when their aligned apex is within ± the specified "
+                "ΔRT of the group center (for example, 0.5 means ±0.5 min). "
+                "Applied across all files in this batch; alternatives remain audited."
+            ),
+            style="Muted.TLabel",
+            wraplength=650,
+        ).grid(column=0, row=2, columnspan=4, sticky="w", padx=8, pady=(0, 6))
+        row += 1
+
         # Optional mass corrections
         optional_frame = section("Optional")
         self.mz_offset = add_label_entry("m/z offset", 0.0, 1, 0, optional_frame)
@@ -282,6 +301,7 @@ class PipelineGUI(tk.Tk):
         self.smoothing_var = tk.BooleanVar(value=True)
         self.isobaric_resolution_var = tk.BooleanVar(value=True)
         self.target_decoy_var = tk.BooleanVar(value=True)
+        self.consensus_peak_var = tk.BooleanVar(value=True)
 
         ttk.Label(toggles_frame, text="Figure file type").grid(
             column=0, row=1, sticky="w", padx=8, pady=6
@@ -318,6 +338,11 @@ class PipelineGUI(tk.Tk):
             text="Enable target-decoy validation",
             variable=self.target_decoy_var,
         ).grid(column=0, row=9, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(
+            toggles_frame,
+            text="Enable cross-run consensus peak selection",
+            variable=self.consensus_peak_var,
+        ).grid(column=0, row=10, columnspan=4, sticky="w", padx=8, pady=4)
         row += 1
 
         # Run and Stop buttons
@@ -428,6 +453,11 @@ class PipelineGUI(tk.Tk):
                 "candidate_mass_outlier_min_delta": float(self.candidate_mass_outlier_min_delta.get()),
                 "candidate_max_q_value": float(self.candidate_max_q_value.get()),
                 "enable_target_decoy": bool(self.target_decoy_var.get()),
+                "enable_consensus_peak_selection": bool(self.consensus_peak_var.get()),
+                "consensus_rt_tolerance": float(self.consensus_rt_tolerance.get()),
+                "consensus_min_replicate_fraction": float(
+                    self.consensus_min_replicate_fraction.get()
+                ),
             }
         except ValueError as e:
             messagebox.showerror("Parameter error", f"Invalid number: {e}")
@@ -488,6 +518,16 @@ class PipelineGUI(tk.Tk):
         if not 0 < params["candidate_max_q_value"] <= 1:
             messagebox.showerror(
                 "Parameter error", "Maximum assignment q-value must be in (0, 1]"
+            )
+            return
+        if params["consensus_rt_tolerance"] <= 0:
+            messagebox.showerror(
+                "Parameter error", "Consensus RT tolerance must be positive"
+            )
+            return
+        if not 0 < params["consensus_min_replicate_fraction"] <= 1:
+            messagebox.showerror(
+                "Parameter error", "Minimum run coverage must be in (0, 1]"
             )
             return
         database_path = params.pop("database_path")
@@ -770,6 +810,9 @@ class PipelineGUI(tk.Tk):
             "candidate_mass_outlier_min_delta": self.candidate_mass_outlier_min_delta.get(),
             "candidate_max_q_value": self.candidate_max_q_value.get(),
             "enable_target_decoy": self.target_decoy_var.get(),
+            "enable_consensus_peak_selection": self.consensus_peak_var.get(),
+            "consensus_rt_tolerance": self.consensus_rt_tolerance.get(),
+            "consensus_min_replicate_fraction": self.consensus_min_replicate_fraction.get(),
         }
         try:
             with open(self._prefs_path, "w", encoding="utf-8") as f:
@@ -810,6 +853,11 @@ class PipelineGUI(tk.Tk):
             ("candidate_min_evidence_difference", self.candidate_min_evidence_difference),
             ("candidate_mass_outlier_min_delta", self.candidate_mass_outlier_min_delta),
             ("candidate_max_q_value", self.candidate_max_q_value),
+            ("consensus_rt_tolerance", self.consensus_rt_tolerance),
+            (
+                "consensus_min_replicate_fraction",
+                self.consensus_min_replicate_fraction,
+            ),
         ]:
             if key in prefs:
                 var.set(prefs[key])
@@ -829,6 +877,8 @@ class PipelineGUI(tk.Tk):
             self.isobaric_resolution_var.set(prefs["resolve_isobaric_conflicts"])
         if "enable_target_decoy" in prefs:
             self.target_decoy_var.set(prefs["enable_target_decoy"])
+        if "enable_consensus_peak_selection" in prefs:
+            self.consensus_peak_var.set(prefs["enable_consensus_peak_selection"])
 
 
 if __name__ == "__main__":

@@ -175,7 +175,11 @@ In the GUI:
      Default: `ABCXYZ`.
    - `Max cleavages`: maximum number of cleavages used during theoretical
      fragmentation. Default: `2`.
-6. Choose output options and run.
+6. For a replicate batch, set the cross-run peak-consensus controls. The
+   default aligned RT tolerance is `±0.3` minutes and a peak group must occur in
+   at least `0.8` (80%) of the input runs. All files selected together are
+   treated as one comparison set.
+7. Choose output options and run.
 
 You can also launch the GUI as a module:
 
@@ -238,6 +242,12 @@ Useful CLI flags:
 - Target-decoy validation is enabled by default. `--candidate-max-q-value`
   sets the acceptance threshold, `--target-decoy-seed` makes the paired decoy
   library reproducible, and `--disable-target-decoy` disables this validation.
+- Multi-file runs perform cross-run RT alignment and consensus peak selection
+  by default. `--consensus-rt-tolerance` controls the allowed aligned apex ΔRT
+  in either direction (for example, `0.5` means `±0.5 min`),
+  `--consensus-min-replicate-fraction` controls the required
+  run coverage, and `--disable-consensus-peak-selection` restores legacy
+  glycan-level AUC consolidation.
 - `--quiet` shows warnings/errors only.
 - `-v` and `-vv` increase logging verbosity.
 
@@ -487,6 +497,33 @@ the default q-value of `0.05`, at least 20 target-winning features are needed
 before any assignment can pass. Non-quantified fragment rows are kept in
 `candidate_rows_not_quantified.csv`.
 
+### Cross-run chromatographic peak consensus
+
+Each selected composition/RT feature is now integrated independently before
+results are combined across files. Nearby adduct-level features for the same
+glycan are first joined into run-local chromatographic peaks. Reproducible,
+high-scoring glycans provide RT landmarks, and each run is mapped to the batch
+median retention-time scale with a robust Theil-Sen linear fit. When too few
+landmarks are available, the method uses a median RT shift; with no landmarks,
+it records an identity alignment rather than inventing a correction.
+
+After alignment, peaks for the same glycan are grouped within the configured RT
+tolerance, with at most one peak from each run in a group. Each group receives:
+
+```text
+replicate coverage = number of runs containing the peak / number of batch runs
+consensus score    = median candidate score - candidate-score MAD
+```
+
+The median absolute deviation (MAD) penalizes a peak whose candidate score is
+unstable across runs. A group is eligible only when both its run coverage and,
+when target-decoy validation is available, its target-decoy pass fraction meet
+the minimum replicate fraction. Eligible groups are ranked first by coverage,
+then by consensus score, then by aligned-RT consistency. Only the highest
+ranked group is used for that glycan in `combined_auc_values.csv`; abundance is
+not part of the ranking, so a large inconsistent peak cannot win merely because
+it has the largest AUC. Alternative peak groups are retained in audit tables.
+
 ## Important Parameters
 
 - `ppm_ms1_tol`: tolerance in ppm for precursor database matching and for
@@ -524,6 +561,14 @@ before any assignment can pass. Non-quantified fragment rows are kept in
   library; default `True`.
 - `candidate_max_q_value`: maximum assignment q-value; default `0.05`.
 - `target_decoy_seed`: reproducible decoy-generation seed; default `1729`.
+- `enable_consensus_peak_selection`: align and choose one reproducible peak
+  group per glycan across a multi-file batch; default `True`.
+- `consensus_rt_tolerance`: allowed absolute difference between an aligned peak
+  apex and its consensus-group center, in minutes. For example, `0.5` accepts
+  peaks within `±0.5 min`; default `0.3`.
+- `consensus_min_replicate_fraction`: minimum fraction of all batch runs that
+  must contain a peak group (and pass target-decoy validation when available);
+  default `0.8`.
 
 ## Outputs
 
@@ -558,6 +603,9 @@ Each sample output directory can include:
   Glycan-level total AUC.
 - `<sample>_auc_values_by_adduct.csv`  
   Per-adduct AUC values.
+- `<sample>_feature_auc_values.csv`
+  Independent AUC and scoring/target-decoy audit fields for every selected
+  chromatographic feature; this is the input to cross-run peak consensus.
 - `<sample>_skyline_transitions.xlsx`  
   Optional Skyline transition export.
 - `images/*.{png,pdf,svg}`
@@ -566,8 +614,24 @@ Each sample output directory can include:
 
 For multi-file runs:
 
-- `combined_auc_values.csv` is written at the output root when more than one
-  file is processed.
+- `combined_auc_values.csv`
+  One consensus-selected peak group per glycan, with a separate AUC column for
+  every run.
+- `consensus_peak_groups.csv`
+  Coverage, median score, score MAD, consensus score, aligned RT MAD, rank,
+  eligibility, and selection decision for every possible peak group.
+- `aligned_feature_auc_values.csv`
+  Run-local peaks with raw/aligned RTs, alignment parameters, group assignment,
+  source features/adducts, and all consensus metrics.
+- `combined_all_feature_auc_values.csv`
+  Wide AUC table containing selected and alternative peak groups.
+- `retention_time_alignment.csv`
+  Per-run slope, intercept, landmark count, residual MAD, and alignment method.
+
+Cross-run consensus should be run on files that form a meaningful comparison
+set (for example technical replicates or samples expected to share the same LC
+method). If unrelated batches should not constrain one another, process them
+separately or disable consensus selection.
 
 ## Notes For Packaging
 

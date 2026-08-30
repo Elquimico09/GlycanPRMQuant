@@ -232,10 +232,18 @@ def calculateAUC(
             'end_rt': end_rt,
             'AUC': auc
         })
-        plt.style.use(['science', 'no-latex'])
-        plt.rcParams['font.family'] = 'Arial'
-
         if plot:
+            # The plotting style is optional and should not be required for
+            # non-plotting AUC calculations (including feature-level scoring).
+            try:
+                import scienceplots  # noqa: F401
+
+                plt.style.use(['science', 'no-latex'])
+            except (ImportError, OSError):
+                logger.warning(
+                    "SciencePlots style is unavailable; using Matplotlib defaults"
+                )
+            plt.rcParams['font.family'] = 'Arial'
             fig, ax = plt.subplots(figsize=(4.8, 4))
             ax.plot(x, y_smooth, label=(
                 f'smoothed ({smoothing_method}, w={smoothing_window})'
@@ -258,3 +266,85 @@ def calculateAUC(
     per_adduct_df = pd.DataFrame(results)
     total_df = per_adduct_df.groupby(glycan_col, as_index=False)['AUC'].sum()
     return per_adduct_df, total_df
+
+
+def calculate_feature_auc(
+    ms2_input,
+    glycan_col: str = "Glycan",
+    precursor_cluster_col: str = "precursor_cluster",
+    feature_col: str = "rt_feature_id",
+    adduct_col: str = "PrecursorAdduct",
+    rel_height: float = 0.7,
+    rel_height_mode: str = "prominence",
+    smoothing_window: int = 30,
+    smoothing_method: str = "gaussian",
+) -> pd.DataFrame:
+    """Calculate an independent AUC for every selected scoring feature.
+
+    Unlike :func:`calculateAUC`, this function does not collapse separate
+    chromatographic features that share a glycan composition. Candidate and
+    target-decoy audit fields are copied onto each feature-level result so the
+    features can subsequently be aligned and ranked across runs.
+    """
+    if isinstance(ms2_input, str):
+        ext = os.path.splitext(ms2_input)[1].lower()
+        if ext == ".csv":
+            df = pd.read_csv(ms2_input)
+        elif ext in (".xlsx", ".xls"):
+            df = pd.read_excel(ms2_input)
+        else:
+            raise ValueError("Unsupported file type.")
+    else:
+        df = ms2_input.copy()
+
+    grouping_columns = [glycan_col, precursor_cluster_col, feature_col]
+    missing = set(grouping_columns) - set(df.columns)
+    if missing:
+        raise ValueError(f"Feature-level AUC requires columns: {sorted(missing)}")
+
+    audit_columns = [
+        "feature_start_rt",
+        "feature_apex_rt",
+        "feature_end_rt",
+        "candidate_score",
+        "discriminative_score",
+        "distinct_fragment_count",
+        "candidate_specific_fragment_count",
+        "explained_intensity_fraction",
+        "resolution_status",
+        "assignment_q_value",
+        "target_decoy_score_margin",
+        "target_decoy_pass",
+    ]
+    rows = []
+    for keys, feature_data in df.groupby(grouping_columns, dropna=False):
+        per_adduct, _ = calculateAUC(
+            feature_data,
+            glycan_col=glycan_col,
+            adduct_col=adduct_col,
+            rel_height=rel_height,
+            rel_height_mode=rel_height_mode,
+            smoothing_window=smoothing_window,
+            smoothing_method=smoothing_method,
+            plot=False,
+        )
+        if per_adduct.empty:
+            continue
+
+        metadata = dict(zip(grouping_columns, keys))
+        for column in audit_columns:
+            if column not in feature_data.columns:
+                continue
+            values = feature_data[column].dropna()
+            metadata[column] = values.iloc[0] if not values.empty else np.nan
+
+        for result in per_adduct.to_dict("records"):
+            rows.append({**metadata, **result})
+
+    if not rows:
+        return pd.DataFrame(
+            columns=grouping_columns
+            + [adduct_col, "peak_rt", "start_rt", "end_rt", "AUC"]
+            + audit_columns
+        )
+    return pd.DataFrame(rows)

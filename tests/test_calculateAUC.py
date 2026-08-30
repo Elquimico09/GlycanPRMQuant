@@ -1,6 +1,6 @@
 import pandas as pd
 
-from glycanPRMQuant.calculateAUC import calculateAUC
+from glycanPRMQuant.calculateAUC import calculateAUC, calculate_feature_auc
 
 
 def test_calculate_auc_returns_per_adduct_and_total_tables():
@@ -25,3 +25,36 @@ def test_calculate_auc_returns_per_adduct_and_total_tables():
     assert set(per_adduct["Adduct"]) == {"2H", "3H"}
     assert total.loc[0, "Glycan"] == "25000"
     assert total.loc[0, "AUC"] > 0
+
+
+def test_calculate_feature_auc_keeps_separate_rt_features():
+    rows = []
+    for feature_id, rt_offset, score in [(1, 0.0, 80.0), (2, 10.0, 70.0)]:
+        for scan, (rt, intensity) in enumerate(
+            zip([0, 1, 2, 3, 4], [0, 10, 100, 10, 0]), start=1
+        ):
+            rows.append(
+                {
+                    "Glycan": "25000",
+                    "precursor_cluster": 3,
+                    "rt_feature_id": feature_id,
+                    "PrecursorAdduct": "2H",
+                    "scan_number": scan + feature_id * 10,
+                    "rt": rt + rt_offset,
+                    "fragment_intensity": intensity,
+                    "candidate_score": score,
+                    "target_decoy_pass": True,
+                }
+            )
+
+    result = calculate_feature_auc(
+        pd.DataFrame(rows),
+        smoothing_window=0,
+        rel_height=0.5,
+        rel_height_mode="height",
+    )
+
+    assert result["rt_feature_id"].tolist() == [1, 2]
+    assert result["peak_rt"].tolist() == [2.0, 12.0]
+    assert result["candidate_score"].tolist() == [80.0, 70.0]
+    assert (result["AUC"] > 0).all()

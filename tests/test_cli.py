@@ -102,6 +102,41 @@ def test_run_parser_rejects_unsupported_figure_filetype():
         )
 
 
+def test_batch_parser_defaults_to_cross_run_consensus_selection():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        ["batch", "--input-dir", "inputs", "--output-root", "out"]
+    )
+
+    assert args.disable_consensus_peak_selection is False
+    assert args.consensus_rt_tolerance == 0.3
+    assert args.consensus_min_replicate_fraction == 0.8
+
+
+def test_batch_parser_accepts_consensus_peak_options():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "batch",
+            "--input-dir",
+            "inputs",
+            "--output-root",
+            "out",
+            "--disable-consensus-peak-selection",
+            "--consensus-rt-tolerance",
+            "0.5",
+            "--consensus-min-replicate-fraction",
+            "0.6",
+        ]
+    )
+
+    assert args.disable_consensus_peak_selection is True
+    assert args.consensus_rt_tolerance == 0.5
+    assert args.consensus_min_replicate_fraction == 0.6
+
+
 @pytest.mark.parametrize(
     "removed_option",
     [

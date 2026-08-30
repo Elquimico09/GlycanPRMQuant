@@ -138,6 +138,9 @@ def _run_batch(args: argparse.Namespace) -> int:
         target_decoy_seed=args.target_decoy_seed,
         overwrite=args.overwrite,
         dry_run=args.dry_run,
+        enable_consensus_peak_selection=not args.disable_consensus_peak_selection,
+        consensus_rt_tolerance=args.consensus_rt_tolerance,
+        consensus_min_replicate_fraction=args.consensus_min_replicate_fraction,
     )
     return 0
 
@@ -169,6 +172,26 @@ def build_parser() -> argparse.ArgumentParser:
     batch_parser.add_argument("--workers", type=int)
     batch_parser.add_argument("--overwrite", action="store_true")
     batch_parser.add_argument("--dry-run", action="store_true")
+    batch_parser.add_argument(
+        "--disable-consensus-peak-selection",
+        action="store_true",
+        help="Use legacy glycan-level consolidation without cross-run peak matching",
+    )
+    batch_parser.add_argument(
+        "--consensus-rt-tolerance",
+        type=float,
+        default=0.3,
+        help=(
+            "Allowed aligned apex delta RT in either direction, in minutes; "
+            "0.5 means ±0.5 min (default: 0.3)"
+        ),
+    )
+    batch_parser.add_argument(
+        "--consensus-min-replicate-fraction",
+        type=float,
+        default=0.8,
+        help="Minimum run coverage required for a consensus peak (default: 0.8)",
+    )
     _add_common_options(batch_parser)
     batch_parser.set_defaults(func=_run_batch)
 

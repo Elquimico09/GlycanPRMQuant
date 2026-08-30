@@ -4,6 +4,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from glycanPRMQuant.consolidateAUC import consolidate_auc_results
 from glycanPRMQuant.logging_utils import configure_logging
+from glycanPRMQuant.retention_alignment import consolidate_consensus_peak_results
 from glycanPRMQuant.spectra import SUPPORTED_SUFFIXES, validate_input_file_types
 
 logger = logging.getLogger(__name__)
@@ -64,10 +65,16 @@ def _process_one_file(
     base = os.path.splitext(os.path.basename(mzml_path))[0]
     out_dir = os.path.join(output_root, base)
     auc_file = os.path.join(out_dir, f"{base}_auc_values.csv")
+    feature_auc_file = os.path.join(out_dir, f"{base}_feature_auc_values.csv")
 
-    # Skip if AUC file exists
-    if not overwrite and os.path.isfile(auc_file):
-        return base, 'skipped', 'AUC file already exists'
+    # Newer batch consolidation also requires feature-level AUCs. Older output
+    # folders that contain only the composition-level table are reprocessed.
+    if (
+        not overwrite
+        and os.path.isfile(auc_file)
+        and os.path.isfile(feature_auc_file)
+    ):
+        return base, 'skipped', 'AUC and feature-level AUC files already exist'
 
     os.makedirs(out_dir, exist_ok=True)
 
@@ -161,13 +168,22 @@ def run_parallel_pipeline(
     target_decoy_seed: int = 1729,
     fragment_mass_tol_unit: str = "Da",
     figure_filetype: str = "pdf",
+    enable_consensus_peak_selection: bool = True,
+    consensus_rt_tolerance: float = 0.3,
+    consensus_min_replicate_fraction: float = 0.8,
 ):
     """
     Discover all Thermo .raw or .mzML files in `input_dir` (or use an explicit list) and process them.
-    Skips any sample whose AUC file already exists.
+    Skips a sample only when both its legacy glycan-level AUC and feature-level
+    AUC files already exist. Multi-file runs align feature retention times and
+    select the most reproducibly scored peak group by default.
     """
     if output_root is None:
         raise ValueError("output_root must be provided")
+    if consensus_rt_tolerance <= 0:
+        raise ValueError("Consensus RT tolerance must be positive")
+    if not 0 < consensus_min_replicate_fraction <= 1:
+        raise ValueError("Consensus minimum replicate fraction must be in (0, 1]")
 
     os.makedirs(output_root, exist_ok=True)
 
@@ -193,6 +209,10 @@ def run_parallel_pipeline(
     else:
         max_workers = n_workers
     max_workers = min(max_workers, 61)
+    run_statuses = {}
+    expected_samples = [
+        os.path.splitext(os.path.basename(path))[0] for path in ms_files
+    ]
 
     def _run():
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -236,6 +256,7 @@ def run_parallel_pipeline(
             }
             for fut in as_completed(futures):
                 base, status, msg = fut.result()
+                run_statuses[base] = status
                 if progress_queue:
                     progress_queue.put((base, status, msg))
                 if status == 'done':
@@ -258,12 +279,45 @@ def run_parallel_pipeline(
 
     # After processing, write combined AUC summary if applicable
     if (not dry_run) and len(ms_files) > 1:
-        try:
-            combined_path = os.path.join(output_root, "combined_auc_values.csv")
-            consolidate_auc_results(output_root, combined_path)
-            logger.info("[✓] Wrote combined AUC table to %s", combined_path)
-        except Exception as e:
-            logger.error("[✗] Failed to write combined AUC table: %s", e)
+        combined_path = os.path.join(output_root, "combined_auc_values.csv")
+        failed_samples = sorted(
+            sample for sample, status in run_statuses.items() if status == "error"
+        )
+        if enable_consensus_peak_selection and failed_samples:
+            logger.error(
+                "[✗] Cross-run consensus was not calculated because processing "
+                "failed for: %s",
+                ", ".join(failed_samples),
+            )
+        else:
+            try:
+                if enable_consensus_peak_selection:
+                    consensus = consolidate_consensus_peak_results(
+                        output_root,
+                        combined_path,
+                        rt_tolerance_minutes=consensus_rt_tolerance,
+                        minimum_replicate_fraction=consensus_min_replicate_fraction,
+                        expected_samples=expected_samples,
+                    )
+                    logger.info(
+                        "[✓] Wrote consensus AUC table with %d selected peak group(s) to %s",
+                        int(consensus.peak_groups["consensus_selected"].sum()),
+                        combined_path,
+                    )
+                    logger.info(
+                        "[✓] Wrote RT alignment and alternative-peak audits to %s",
+                        output_root,
+                    )
+                else:
+                    consolidate_auc_results(output_root, combined_path)
+                    logger.info("[✓] Wrote combined AUC table to %s", combined_path)
+            except Exception as e:
+                stage = (
+                    "Consensus peak selection"
+                    if enable_consensus_peak_selection
+                    else "AUC consolidation"
+                )
+                logger.error("[✗] %s failed: %s", stage, e)
 
     if log_queue is not None:
         log_queue.put(None)  # sentinel
