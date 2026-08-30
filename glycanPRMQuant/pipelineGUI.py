@@ -13,6 +13,21 @@ from glycanPRMQuant.parallelProcess import run_parallel_pipeline
 from glycanPRMQuant.spectra import validate_input_file_types
 
 
+def _ensure_output_directory(path: str) -> str:
+    """Create and return a normalized GUI output directory."""
+    requested = os.fspath(path).strip()
+    if not requested:
+        raise ValueError("Enter or select an output directory")
+
+    output_directory = os.path.abspath(os.path.expanduser(requested))
+    if os.path.exists(output_directory) and not os.path.isdir(output_directory):
+        raise NotADirectoryError(
+            f"Output path is not a directory: {output_directory}"
+        )
+    os.makedirs(output_directory, exist_ok=True)
+    return output_directory
+
+
 class PipelineGUI(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -476,8 +491,15 @@ class PipelineGUI(tk.Tk):
         except ValueError as exc:
             messagebox.showerror("Input error", str(exc))
             return
-        if not os.path.isdir(params["output_root"]):
-            messagebox.showerror("Output error", "Output directory does not exist")
+        try:
+            params["output_root"] = _ensure_output_directory(
+                params["output_root"]
+            )
+            self.out_dir.set(params["output_root"])
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Output error", f"Could not create the output directory:\n{exc}"
+            )
             return
         if params["database_path"]:
             try:
