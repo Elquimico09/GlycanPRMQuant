@@ -9,6 +9,12 @@ import pandas as pd
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
+from glycanPRMQuant.mass_tolerance import (
+    mass_accuracy_reliability,
+    mass_error_ppm,
+    validate_tolerance,
+)
+
 
 @dataclass(frozen=True)
 class CandidateScoringConfig:
@@ -16,10 +22,13 @@ class CandidateScoringConfig:
 
     precursor_cluster_ppm: float = 20.0
     fragment_mass_tolerance: float = 0.02
+    fragment_mass_tolerance_unit: str = "Da"
+    fragment_mass_accuracy_reference_ppm: float = 20.0
     minimum_distinct_fragments: int = 2
     minimum_explained_intensity: float = 0.005
     minimum_candidate_score: float = 35.0
     minimum_discriminative_evidence_difference: float = 4.0
+    maximum_assignment_q_value: float = 0.05
     precursor_likelihood_default_sigma_ppm: float = 1.0
     precursor_likelihood_min_sigma_ppm: float = 0.25
     precursor_calibration_min_points: int = 10
@@ -34,10 +43,24 @@ class CandidateScoringConfig:
     feature_prominence_fraction: float = 0.10
 
     def __post_init__(self):
+        tolerance_value, tolerance_unit = validate_tolerance(
+            self.fragment_mass_tolerance,
+            self.fragment_mass_tolerance_unit,
+        )
+        object.__setattr__(
+            self,
+            "fragment_mass_tolerance",
+            tolerance_value,
+        )
+        object.__setattr__(
+            self,
+            "fragment_mass_tolerance_unit",
+            tolerance_unit,
+        )
         if self.precursor_cluster_ppm <= 0:
             raise ValueError("Precursor cluster tolerance must be positive")
-        if self.fragment_mass_tolerance <= 0:
-            raise ValueError("Fragment mass tolerance must be positive")
+        if self.fragment_mass_accuracy_reference_ppm <= 0:
+            raise ValueError("Fragment mass-accuracy reference ppm must be positive")
         if self.minimum_distinct_fragments < 1:
             raise ValueError("Minimum distinct fragments must be at least 1")
         if not 0 <= self.minimum_explained_intensity <= 1:
@@ -47,6 +70,8 @@ class CandidateScoringConfig:
             or self.minimum_discriminative_evidence_difference < 0
         ):
             raise ValueError("Candidate score thresholds cannot be negative")
+        if not 0 < self.maximum_assignment_q_value <= 1:
+            raise ValueError("Maximum assignment q-value must be in (0, 1]")
         if (
             self.precursor_likelihood_default_sigma_ppm <= 0
             or self.precursor_likelihood_min_sigma_ppm <= 0
@@ -67,6 +92,8 @@ class CandidateScoringResult:
     resolved_rows: pd.DataFrame
     reported_rows: pd.DataFrame
     candidate_scores: pd.DataFrame
+    decoy_scores: pd.DataFrame | None = None
+    target_decoy_competitions: pd.DataFrame | None = None
 
 
 def _normalize_glycan(value) -> str:
@@ -279,6 +306,15 @@ def _prepare_evidence(work: pd.DataFrame) -> pd.DataFrame:
     evidence["_observed_fragment_mz"] = pd.to_numeric(
         evidence[observed_col], errors="coerce"
     )
+    theoretical_col = (
+        "theoretical_fragment_mz"
+        if "theoretical_fragment_mz" in evidence.columns
+        else "fragment_mz"
+    )
+    evidence["_theoretical_fragment_mz"] = pd.to_numeric(
+        evidence.get(theoretical_col, evidence["_observed_fragment_mz"]),
+        errors="coerce",
+    )
     evidence["_event_mz"] = evidence["_observed_fragment_mz"].round(5)
     evidence["_annotation"] = evidence[annotation_col].astype(str)
     charge = evidence.get("Charge", pd.Series(0, index=evidence.index)).astype(str)
@@ -286,7 +322,7 @@ def _prepare_evidence(work: pd.DataFrame) -> pd.DataFrame:
     evidence["_transition"] = evidence["_annotation"] + "|z" + charge + "|" + adduct
 
     if "mz_diff" in evidence.columns:
-        evidence["_abs_mass_error"] = pd.to_numeric(
+        evidence["_abs_mass_error_da"] = pd.to_numeric(
             evidence["mz_diff"], errors="coerce"
         ).abs()
     else:
@@ -294,7 +330,21 @@ def _prepare_evidence(work: pd.DataFrame) -> pd.DataFrame:
             evidence.get("ppm_error", pd.Series(np.nan, index=evidence.index)),
             errors="coerce",
         ).abs()
-        evidence["_abs_mass_error"] = ppm * evidence["_observed_fragment_mz"] / 1e6
+        evidence["_abs_mass_error_da"] = (
+            ppm * evidence["_theoretical_fragment_mz"] / 1e6
+        )
+    evidence["_abs_mass_error_ppm"] = mass_error_ppm(
+        evidence["_observed_fragment_mz"].to_numpy(dtype=float),
+        evidence["_theoretical_fragment_mz"].to_numpy(dtype=float),
+    )
+    fallback_ppm = pd.to_numeric(
+        evidence.get("ppm_error", pd.Series(np.nan, index=evidence.index)),
+        errors="coerce",
+    ).abs()
+    evidence["_abs_mass_error_ppm"] = pd.Series(
+        evidence["_abs_mass_error_ppm"], index=evidence.index
+    ).fillna(fallback_ppm)
+    evidence["_abs_mass_error"] = evidence["_abs_mass_error_da"]
 
     evidence["fragment_intensity"] = pd.to_numeric(
         evidence["fragment_intensity"], errors="coerce"
@@ -480,6 +530,8 @@ def _score_candidates(
     scans: pd.DataFrame,
     feature_summary: pd.DataFrame,
     config: CandidateScoringConfig,
+    precursor_calibration: dict | None = None,
+    fragment_reliability_by_feature: dict[tuple[int, int], dict] | None = None,
 ) -> pd.DataFrame:
     rows = []
     keys = ["_precursor_cluster", "_rt_feature"]
@@ -500,6 +552,30 @@ def _score_candidates(
             ["rt", "scan_number"]
         )["scan_number"].tolist()
         number_of_candidates = int(conflict["Glycan"].nunique())
+        supplied_reliability = (fragment_reliability_by_feature or {}).get(
+            (int(cluster), int(feature))
+        )
+        if supplied_reliability is None:
+            feature_events = conflict.drop_duplicates(["scan_number", "_event_mz"])
+            representative_fragment_mz = float(
+                feature_events["_observed_fragment_mz"].median()
+            )
+            equivalent_ppm, accuracy_reliability = mass_accuracy_reliability(
+                config.fragment_mass_tolerance,
+                config.fragment_mass_tolerance_unit,
+                representative_fragment_mz,
+                config.fragment_mass_accuracy_reference_ppm,
+            )
+        else:
+            representative_fragment_mz = float(
+                supplied_reliability["fragment_tolerance_representative_mz"]
+            )
+            equivalent_ppm = float(
+                supplied_reliability["fragment_tolerance_equivalent_ppm"]
+            )
+            accuracy_reliability = float(
+                supplied_reliability["fragment_mass_accuracy_reliability"]
+            )
         common_events = conflict.loc[
             conflict["_event_frequency"] >= number_of_candidates
         ]
@@ -531,12 +607,29 @@ def _score_candidates(
             explained_component = float(np.clip(explained_fraction / 0.25, 0.0, 1.0))
             fragment_support = float(1.0 - np.exp(-effective_fragments / 2.0))
 
+            mass_error_column = (
+                "_abs_mass_error_ppm"
+                if config.fragment_mass_tolerance_unit == "ppm"
+                else "_abs_mass_error_da"
+            )
             normalized_error = (
-                pd.to_numeric(group["_abs_mass_error"], errors="coerce")
+                pd.to_numeric(group[mass_error_column], errors="coerce")
                 / max(config.fragment_mass_tolerance, 1e-12)
             ).to_numpy(dtype=float)
             mass_weights = np.sqrt(group["fragment_intensity"].to_numpy(dtype=float))
             median_normalized_error = _weighted_median(normalized_error, mass_weights)
+            median_mass_error_da = _weighted_median(
+                pd.to_numeric(
+                    group["_abs_mass_error_da"], errors="coerce"
+                ).to_numpy(dtype=float),
+                mass_weights,
+            )
+            median_mass_error_ppm = _weighted_median(
+                pd.to_numeric(
+                    group["_abs_mass_error_ppm"], errors="coerce"
+                ).to_numpy(dtype=float),
+                mass_weights,
+            )
             fragment_accuracy = (
                 float(np.exp(-0.5 * median_normalized_error ** 2))
                 if np.isfinite(median_normalized_error)
@@ -581,24 +674,29 @@ def _score_candidates(
                     "candidate_specific_fragment_count": candidate_specific,
                     "effective_fragment_count": effective_fragments,
                     "fragment_support_score": fragment_support,
-                    "median_fragment_mass_error": (
-                        median_normalized_error * config.fragment_mass_tolerance
-                        if np.isfinite(median_normalized_error)
-                        else np.nan
-                    ),
+                    "median_fragment_mass_error": median_mass_error_da,
+                    "median_fragment_mass_error_ppm": median_mass_error_ppm,
                     "fragment_mass_accuracy_score": fragment_accuracy,
+                    "fragment_mass_tolerance_value": config.fragment_mass_tolerance,
+                    "fragment_mass_tolerance_unit": config.fragment_mass_tolerance_unit,
+                    "fragment_tolerance_representative_mz": representative_fragment_mz,
+                    "fragment_tolerance_equivalent_ppm": equivalent_ppm,
+                    "fragment_mass_accuracy_reliability": accuracy_reliability,
                     "median_signed_precursor_ppm_error": median_signed_precursor_error,
                     "median_precursor_ppm_error": median_absolute_precursor_error,
                     **coelution,
                     **feature_info,
                 }
             )
-    return _finalize_candidate_scores(pd.DataFrame(rows), config)
+    return _finalize_candidate_scores(
+        pd.DataFrame(rows), config, precursor_calibration=precursor_calibration
+    )
 
 
 def _finalize_candidate_scores(
     scores: pd.DataFrame,
     config: CandidateScoringConfig,
+    precursor_calibration: dict | None = None,
 ) -> pd.DataFrame:
     """Calibrate precursor evidence and make optional terms feature-comparable."""
     if scores.empty:
@@ -606,46 +704,67 @@ def _finalize_candidate_scores(
     finalized = scores.copy()
     keys = ["_precursor_cluster", "_rt_feature"]
 
+    if "fragment_mass_accuracy_reliability" not in finalized.columns:
+        representative_mz = 500.0
+        equivalent_ppm, reliability = mass_accuracy_reliability(
+            config.fragment_mass_tolerance,
+            config.fragment_mass_tolerance_unit,
+            representative_mz,
+            config.fragment_mass_accuracy_reference_ppm,
+        )
+        finalized["fragment_mass_tolerance_value"] = config.fragment_mass_tolerance
+        finalized["fragment_mass_tolerance_unit"] = config.fragment_mass_tolerance_unit
+        finalized["fragment_tolerance_representative_mz"] = representative_mz
+        finalized["fragment_tolerance_equivalent_ppm"] = equivalent_ppm
+        finalized["fragment_mass_accuracy_reliability"] = reliability
+
     # Use one value per precursor-cluster/candidate pair so long RT features do
     # not receive more influence on calibration than short ones. Iteratively
     # choose the candidate closest to the run-level error center in each
     # cluster, then estimate that center and spread robustly.
-    calibration_candidates = (
-        finalized.groupby(["_precursor_cluster", "Glycan"], as_index=False)
-        ["median_signed_precursor_ppm_error"]
-        .median()
-        .dropna(subset=["median_signed_precursor_ppm_error"])
-    )
-    calibration_center = 0.0
-    calibration_values = np.asarray([], dtype=float)
-    if not calibration_candidates.empty:
-        for _ in range(2):
-            distance = (
-                calibration_candidates["median_signed_precursor_ppm_error"]
-                - calibration_center
-            ).abs()
-            closest_indices = distance.groupby(
-                calibration_candidates["_precursor_cluster"]
-            ).idxmin()
-            calibration_values = calibration_candidates.loc[
-                closest_indices, "median_signed_precursor_ppm_error"
-            ].to_numpy(dtype=float)
-            calibration_center = float(np.median(calibration_values))
-
-    if calibration_values.size >= config.precursor_calibration_min_points:
-        q1, q3 = np.quantile(calibration_values, [0.25, 0.75])
-        empirical_sigma = float((q3 - q1) / 1.349)
-        if not np.isfinite(empirical_sigma) or empirical_sigma <= 0:
-            empirical_sigma = float(
-                1.4826
-                * np.median(np.abs(calibration_values - calibration_center))
-            )
-        sigma = max(config.precursor_likelihood_min_sigma_ppm, empirical_sigma)
-        calibration_source = "empirical_iqr"
+    if precursor_calibration is not None:
+        calibration_center = float(precursor_calibration["center_ppm"])
+        sigma = float(precursor_calibration["sigma_ppm"])
+        calibration_point_count = int(precursor_calibration["points"])
+        calibration_source = str(precursor_calibration["source"])
     else:
+        calibration_candidates = (
+            finalized.groupby(["_precursor_cluster", "Glycan"], as_index=False)
+            ["median_signed_precursor_ppm_error"]
+            .median()
+            .dropna(subset=["median_signed_precursor_ppm_error"])
+        )
         calibration_center = 0.0
-        sigma = config.precursor_likelihood_default_sigma_ppm
-        calibration_source = "configured_fallback"
+        calibration_values = np.asarray([], dtype=float)
+        if not calibration_candidates.empty:
+            for _ in range(2):
+                distance = (
+                    calibration_candidates["median_signed_precursor_ppm_error"]
+                    - calibration_center
+                ).abs()
+                closest_indices = distance.groupby(
+                    calibration_candidates["_precursor_cluster"]
+                ).idxmin()
+                calibration_values = calibration_candidates.loc[
+                    closest_indices, "median_signed_precursor_ppm_error"
+                ].to_numpy(dtype=float)
+                calibration_center = float(np.median(calibration_values))
+
+        calibration_point_count = int(calibration_values.size)
+        if calibration_values.size >= config.precursor_calibration_min_points:
+            q1, q3 = np.quantile(calibration_values, [0.25, 0.75])
+            empirical_sigma = float((q3 - q1) / 1.349)
+            if not np.isfinite(empirical_sigma) or empirical_sigma <= 0:
+                empirical_sigma = float(
+                    1.4826
+                    * np.median(np.abs(calibration_values - calibration_center))
+                )
+            sigma = max(config.precursor_likelihood_min_sigma_ppm, empirical_sigma)
+            calibration_source = "empirical_iqr"
+        else:
+            calibration_center = 0.0
+            sigma = config.precursor_likelihood_default_sigma_ppm
+            calibration_source = "configured_fallback"
 
     calibrated_error = (
         finalized["median_signed_precursor_ppm_error"] - calibration_center
@@ -685,7 +804,7 @@ def _finalize_candidate_scores(
     finalized["precursor_mass_accuracy_score"] = relative_likelihood
     finalized["precursor_likelihood_center_ppm"] = calibration_center
     finalized["precursor_likelihood_sigma_ppm"] = sigma
-    finalized["precursor_calibration_points"] = int(calibration_values.size)
+    finalized["precursor_calibration_points"] = calibration_point_count
     finalized["precursor_calibration_source"] = calibration_source
 
     candidate_count = finalized.groupby(keys)["Glycan"].transform("size")
@@ -698,24 +817,42 @@ def _finalize_candidate_scores(
         0.5,
     )
 
+    raw_mass_accuracy_weight = (
+        0.15 * finalized["fragment_mass_accuracy_reliability"]
+    )
+    bounded_weight_total = 0.85 + raw_mass_accuracy_weight
+    finalized["effective_fragment_mass_accuracy_weight"] = (
+        raw_mass_accuracy_weight / bounded_weight_total
+    )
     finalized["candidate_score"] = 100.0 * (
         0.35 * finalized["explained_intensity_score"]
         + 0.20 * finalized["fragment_support_score"]
-        + 0.15 * finalized["fragment_mass_accuracy_score"]
+        + raw_mass_accuracy_weight * finalized["fragment_mass_accuracy_score"]
         + 0.10 * finalized["precursor_relative_likelihood"]
         + 0.20 * finalized["coelution_component_used"]
-    )
+    ) / bounded_weight_total
 
     # The discriminative score is centered within each feature. Equal/common
     # components therefore cancel exactly. Precursor evidence enters as a
     # calibrated Gaussian log-likelihood instead of a flat tolerance score.
+    discriminative_mass_weight = (
+        15.0 * finalized["fragment_mass_accuracy_reliability"]
+    )
+    discriminative_scale = 90.0 / (75.0 + discriminative_mass_weight)
+    finalized["effective_fragment_mass_accuracy_discriminative_weight"] = (
+        discriminative_mass_weight * discriminative_scale
+    )
     finalized["raw_discriminative_evidence"] = (
-        35.0 * finalized["explained_intensity_score"]
-        + 20.0 * finalized["fragment_support_score"]
-        + 15.0 * finalized["fragment_mass_accuracy_score"]
+        discriminative_scale
+        * (
+            35.0 * finalized["explained_intensity_score"]
+            + 20.0 * finalized["fragment_support_score"]
+            + discriminative_mass_weight
+            * finalized["fragment_mass_accuracy_score"]
+            + 20.0 * finalized["coelution_component_used"]
+        )
         + config.precursor_log_likelihood_weight
         * finalized["precursor_log_likelihood"]
-        + 20.0 * finalized["coelution_component_used"]
     )
     feature_mean = finalized.groupby(keys)["raw_discriminative_evidence"].transform("mean")
     finalized["discriminative_score"] = (
@@ -775,6 +912,17 @@ def _apply_resolution(
         ordered = pd.concat([active_ordered, pruned_ordered])
         scored.loc[ordered.index, "candidate_rank"] = np.arange(1, len(ordered) + 1)
         if len(ordered) == 1:
+            only_index = ordered.index[0]
+            only = scored.loc[only_index]
+            enough_evidence = (
+                only["distinct_fragment_count"] >= config.minimum_distinct_fragments
+                and only["explained_intensity_fraction"]
+                >= config.minimum_explained_intensity
+                and only["candidate_score"] >= config.minimum_candidate_score
+            )
+            if not enough_evidence:
+                scored.loc[only_index, "resolution_status"] = "insufficient_evidence"
+                scored.loc[only_index, "selected"] = False
             continue
         # Contested candidates are reportable, but none is eligible for
         # composition-level quantification unless the conflict is resolved.
@@ -859,11 +1007,137 @@ def _apply_resolution(
     return scored
 
 
+def _apply_target_decoy_statistics(
+    target_scores: pd.DataFrame,
+    decoy_scores: pd.DataFrame | None,
+    config: CandidateScoringConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Attach feature-level target-decoy competition and monotone q-values."""
+    scored = target_scores.copy()
+    scored["target_decoy_evaluated"] = decoy_scores is not None
+    scored["target_assignment_score"] = np.nan
+    scored["best_decoy_score"] = np.nan
+    scored["target_decoy_score_margin"] = np.nan
+    scored["target_decoy_winner"] = True
+    scored["assignment_fdr"] = np.nan
+    scored["assignment_q_value"] = np.nan
+    scored["target_decoy_pass"] = True
+    if decoy_scores is None or scored.empty:
+        return scored, pd.DataFrame()
+
+    keys = ["_precursor_cluster", "_rt_feature"]
+    target_best = (
+        scored.sort_values(keys + ["candidate_rank"])
+        .drop_duplicates(keys, keep="first")
+        .set_index(keys)["candidate_score"]
+    )
+    if decoy_scores.empty:
+        decoy_best = pd.Series(dtype=float, name="candidate_score")
+        decoy_best.index = pd.MultiIndex.from_arrays([[], []], names=keys)
+    else:
+        decoy_best = (
+            decoy_scores.sort_values(keys + ["candidate_rank"])
+            .drop_duplicates(keys, keep="first")
+            .set_index(keys)["candidate_score"]
+        )
+
+    feature_index = target_best.index.union(decoy_best.index)
+    competition = pd.DataFrame(index=feature_index)
+    competition["target_score"] = target_best.reindex(feature_index).fillna(0.0)
+    competition["decoy_score"] = decoy_best.reindex(feature_index).fillna(0.0)
+    competition["target_winner"] = (
+        competition["target_score"] >= competition["decoy_score"]
+    )
+    competition["winner_score"] = competition[
+        ["target_score", "decoy_score"]
+    ].max(axis=1)
+
+    target_thresholds = np.sort(target_best.dropna().unique())[::-1]
+    fdr_by_threshold: dict[float, float] = {}
+    for threshold in target_thresholds:
+        passing = competition["winner_score"] >= threshold
+        target_count = int(
+            (passing & competition["target_winner"]).sum()
+        )
+        decoy_count = int(
+            (passing & ~competition["target_winner"]).sum()
+        )
+        fdr_by_threshold[float(threshold)] = min(
+            1.0, (decoy_count + 1.0) / max(target_count, 1)
+        )
+
+    q_by_threshold: dict[float, float] = {}
+    running_min = 1.0
+    for threshold in target_thresholds[::-1]:
+        running_min = min(running_min, fdr_by_threshold[float(threshold)])
+        q_by_threshold[float(threshold)] = running_min
+
+    target_feature_stats = pd.DataFrame(index=target_best.index)
+    target_feature_stats["target_assignment_score"] = target_best
+    target_feature_stats["best_decoy_score"] = decoy_best.reindex(
+        target_best.index
+    ).fillna(0.0)
+    target_feature_stats["target_decoy_score_margin"] = (
+        target_feature_stats["target_assignment_score"]
+        - target_feature_stats["best_decoy_score"]
+    )
+    target_feature_stats["target_decoy_winner"] = (
+        target_feature_stats["target_assignment_score"]
+        >= target_feature_stats["best_decoy_score"]
+    )
+    target_feature_stats["assignment_fdr"] = target_feature_stats[
+        "target_assignment_score"
+    ].map(fdr_by_threshold)
+    target_feature_stats["assignment_q_value"] = target_feature_stats[
+        "target_assignment_score"
+    ].map(q_by_threshold)
+    target_feature_stats["target_decoy_pass"] = (
+        target_feature_stats["target_decoy_winner"]
+        & (
+            target_feature_stats["assignment_q_value"]
+            <= config.maximum_assignment_q_value
+        )
+    )
+
+    competition = competition.join(
+        target_feature_stats[
+            ["assignment_fdr", "assignment_q_value", "target_decoy_pass"]
+        ],
+        how="left",
+    )
+    competition["competition_winner"] = np.where(
+        competition["target_winner"], "target", "decoy"
+    )
+
+    for feature_key, stats in target_feature_stats.iterrows():
+        feature_mask = (
+            (scored["_precursor_cluster"] == feature_key[0])
+            & (scored["_rt_feature"] == feature_key[1])
+        )
+        for column, value in stats.items():
+            scored.loc[feature_mask, column] = value
+
+        selected_mask = feature_mask & scored["selected"]
+        if selected_mask.any() and not bool(stats["target_decoy_pass"]):
+            scored.loc[selected_mask, "selected"] = False
+            status = (
+                "target_decoy_q_failed"
+                if bool(stats["target_decoy_winner"])
+                else "decoy_outcompeted"
+            )
+            scored.loc[feature_mask, "resolution_status"] = status
+
+    scored["target_decoy_evaluated"] = True
+    scored["quantification_weight"] = scored["selected"].astype(float)
+    return scored, competition.reset_index()
+
+
 def score_and_resolve_candidates(
     matched_data: pd.DataFrame,
     scan_data: pd.DataFrame | None = None,
     config: CandidateScoringConfig | None = None,
     resolve: bool = True,
+    decoy_matched_data: pd.DataFrame | None = None,
 ) -> CandidateScoringResult:
     """Score composition candidates and resolve only well-separated conflicts."""
     config = config or CandidateScoringConfig()
@@ -881,7 +1155,49 @@ def score_and_resolve_candidates(
     work, scans, feature_summary = _assign_rt_features(work, scans, config)
     evidence = _prepare_evidence(work)
     scores = _score_candidates(evidence, scans, feature_summary, config)
+    tolerance_audit_columns = [
+        "fragment_tolerance_representative_mz",
+        "fragment_tolerance_equivalent_ppm",
+        "fragment_mass_accuracy_reliability",
+    ]
+    target_fragment_reliability = (
+        scores.drop_duplicates(["_precursor_cluster", "_rt_feature"])
+        .set_index(["_precursor_cluster", "_rt_feature"])[tolerance_audit_columns]
+        .to_dict("index")
+    )
+    target_precursor_calibration = {
+        "center_ppm": scores["precursor_likelihood_center_ppm"].iloc[0],
+        "sigma_ppm": scores["precursor_likelihood_sigma_ppm"].iloc[0],
+        "points": scores["precursor_calibration_points"].iloc[0],
+        "source": scores["precursor_calibration_source"].iloc[0],
+    }
     scores = _apply_resolution(scores, config, resolve=resolve)
+    decoy_scores = None
+    if decoy_matched_data is not None:
+        if decoy_matched_data.empty:
+            decoy_scores = pd.DataFrame()
+        else:
+            decoy_work, decoy_scans = _build_scan_table(
+                decoy_matched_data, scan_data, config
+            )
+            decoy_work, decoy_scans, decoy_feature_summary = _assign_rt_features(
+                decoy_work, decoy_scans, config
+            )
+            decoy_evidence = _prepare_evidence(decoy_work)
+            decoy_scores = _score_candidates(
+                decoy_evidence,
+                decoy_scans,
+                decoy_feature_summary,
+                config,
+                precursor_calibration=target_precursor_calibration,
+                fragment_reliability_by_feature=target_fragment_reliability,
+            )
+            decoy_scores = _apply_resolution(
+                decoy_scores, config, resolve=False
+            )
+    scores, target_decoy_competitions = _apply_target_decoy_statistics(
+        scores, decoy_scores, config
+    )
 
     merge_columns = [
         "_precursor_cluster",
@@ -902,6 +1218,14 @@ def score_and_resolve_candidates(
         "reported",
         "selected",
         "quantification_weight",
+        "target_decoy_evaluated",
+        "target_assignment_score",
+        "best_decoy_score",
+        "target_decoy_score_margin",
+        "target_decoy_winner",
+        "assignment_fdr",
+        "assignment_q_value",
+        "target_decoy_pass",
         "eligible_for_resolution",
         "mass_outlier_pruned",
         "candidate_rejection_reason",
@@ -910,6 +1234,15 @@ def score_and_resolve_candidates(
         "distinct_fragment_count",
         "candidate_specific_fragment_count",
         "fragment_mass_accuracy_score",
+        "median_fragment_mass_error",
+        "median_fragment_mass_error_ppm",
+        "fragment_mass_tolerance_value",
+        "fragment_mass_tolerance_unit",
+        "fragment_tolerance_representative_mz",
+        "fragment_tolerance_equivalent_ppm",
+        "fragment_mass_accuracy_reliability",
+        "effective_fragment_mass_accuracy_weight",
+        "effective_fragment_mass_accuracy_discriminative_weight",
         "median_signed_precursor_ppm_error",
         "median_precursor_ppm_error",
         "best_precursor_ppm_error",
@@ -954,8 +1287,26 @@ def score_and_resolve_candidates(
             "_rt_feature": "rt_feature_id",
         }
     ).sort_values(["precursor_cluster", "rt_feature_id", "candidate_rank"])
+    if decoy_scores is None or decoy_scores.empty:
+        decoy_scores_output = pd.DataFrame()
+    else:
+        decoy_scores_output = decoy_scores.rename(
+            columns={
+                "_precursor_cluster": "precursor_cluster",
+                "_rt_feature": "rt_feature_id",
+            }
+        ).sort_values(["precursor_cluster", "rt_feature_id", "candidate_rank"])
+    if not target_decoy_competitions.empty:
+        target_decoy_competitions = target_decoy_competitions.rename(
+            columns={
+                "_precursor_cluster": "precursor_cluster",
+                "_rt_feature": "rt_feature_id",
+            }
+        ).sort_values(["precursor_cluster", "rt_feature_id"])
     return CandidateScoringResult(
         resolved.reset_index(drop=True),
         reported.reset_index(drop=True),
         scores.reset_index(drop=True),
+        decoy_scores_output.reset_index(drop=True),
+        target_decoy_competitions.reset_index(drop=True),
     )

@@ -12,7 +12,19 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mz-offset", type=float, default=0.0)
     parser.add_argument("--mass-offset", type=float, default=0.0)
     parser.add_argument("--intensity-threshold", type=float, default=1e2)
-    parser.add_argument("--fragment-mass-tol", type=float, default=0.02)
+    parser.add_argument(
+        "--fragment-mass-tol",
+        type=float,
+        default=0.02,
+        help="Numeric fragment matching tolerance (default: 0.02)",
+    )
+    parser.add_argument(
+        "--fragment-mass-tol-unit",
+        type=str.lower,
+        choices=["da", "ppm"],
+        default="da",
+        help="Unit for --fragment-mass-tol (default: da)",
+    )
     parser.add_argument("--fragment-ion-series", default="BY")
     parser.add_argument("--fragment-max-cleavages", type=int, default=2)
     parser.add_argument("--smoothing-window", type=int, default=11)
@@ -29,6 +41,9 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--candidate-min-score", type=float, default=35.0)
     parser.add_argument("--candidate-min-evidence-difference", type=float, default=4.0)
     parser.add_argument("--candidate-mass-outlier-min-delta", type=float, default=2.0)
+    parser.add_argument("--candidate-max-q-value", type=float, default=0.05)
+    parser.add_argument("--disable-target-decoy", action="store_true")
+    parser.add_argument("--target-decoy-seed", type=int, default=1729)
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("-v", "--verbose", action="count", default=0)
 
@@ -53,6 +68,7 @@ def _run_one(args: argparse.Namespace) -> int:
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,
         fragment_mass_tol=args.fragment_mass_tol,
+        fragment_mass_tol_unit=args.fragment_mass_tol_unit,
         smoothing_window=args.smoothing_window,
         smoothing_method=args.smoothing_method,
         enable_smoothing=not args.disable_smoothing,
@@ -67,6 +83,9 @@ def _run_one(args: argparse.Namespace) -> int:
         candidate_min_score=args.candidate_min_score,
         candidate_min_evidence_difference=args.candidate_min_evidence_difference,
         candidate_mass_outlier_min_delta=args.candidate_mass_outlier_min_delta,
+        enable_target_decoy=not args.disable_target_decoy,
+        candidate_max_q_value=args.candidate_max_q_value,
+        target_decoy_seed=args.target_decoy_seed,
         precursor_db_path=args.precursor_db_path,
         structure_db_path=args.structure_db_path,
     )
@@ -88,6 +107,7 @@ def _run_batch(args: argparse.Namespace) -> int:
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,
         fragment_mass_tol=args.fragment_mass_tol,
+        fragment_mass_tol_unit=args.fragment_mass_tol_unit,
         fragment_ion_series=args.fragment_ion_series,
         fragment_max_cleavages=args.fragment_max_cleavages,
         smoothing_window=args.smoothing_window,
@@ -104,6 +124,9 @@ def _run_batch(args: argparse.Namespace) -> int:
         candidate_min_score=args.candidate_min_score,
         candidate_min_evidence_difference=args.candidate_min_evidence_difference,
         candidate_mass_outlier_min_delta=args.candidate_mass_outlier_min_delta,
+        enable_target_decoy=not args.disable_target_decoy,
+        candidate_max_q_value=args.candidate_max_q_value,
+        target_decoy_seed=args.target_decoy_seed,
         overwrite=args.overwrite,
         dry_run=args.dry_run,
     )

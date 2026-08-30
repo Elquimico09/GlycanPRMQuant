@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from glycanPRMQuant.candidate_scoring import (
     CandidateScoringConfig,
+    _apply_target_decoy_statistics,
     _finalize_candidate_scores,
     score_and_resolve_candidates,
 )
@@ -224,6 +226,23 @@ def test_rt_features_keep_isobaric_candidates_at_different_elution_times():
     assert set(result.resolved_rows["Glycan"]) == {"25000", "26000"}
 
 
+def test_uncontested_candidate_must_pass_minimum_evidence_requirements():
+    profile = [10, 50, 100, 50, 10]
+    rows = _candidate_rows("25000", [101.0], [profile])
+    result = score_and_resolve_candidates(
+        pd.DataFrame(rows),
+        _scan_table(profile),
+        CandidateScoringConfig(minimum_distinct_fragments=2),
+    )
+
+    assert set(result.candidate_scores["resolution_status"]) == {
+        "insufficient_evidence"
+    }
+    assert not result.candidate_scores["selected"].any()
+    assert result.resolved_rows.empty
+    assert not result.reported_rows.empty
+
+
 def test_no_candidate_specific_fragments_get_a_structural_status():
     profile = [10, 50, 100, 50, 10]
     rows = _candidate_rows("25000", [101.0, 201.0], [profile, profile])
@@ -346,3 +365,105 @@ def test_missing_coelution_is_neutral_for_every_candidate_in_feature():
 
     assert not finalized["coelution_comparable"].any()
     assert finalized["coelution_component_used"].eq(0.5).all()
+
+
+def test_fragment_mass_accuracy_weight_decreases_as_tolerance_widens():
+    rows = [
+        _component_row(0, "accurate", 0.5),
+        _component_row(0, "inaccurate", 0.5),
+    ]
+    rows[0]["fragment_mass_accuracy_score"] = 1.0
+    rows[1]["fragment_mass_accuracy_score"] = 0.0
+
+    orbitrap = _finalize_candidate_scores(
+        pd.DataFrame(rows),
+        CandidateScoringConfig(
+            fragment_mass_tolerance=20.0,
+            fragment_mass_tolerance_unit="ppm",
+        ),
+    ).set_index("Glycan")
+    ion_trap = _finalize_candidate_scores(
+        pd.DataFrame(rows),
+        CandidateScoringConfig(
+            fragment_mass_tolerance=0.5,
+            fragment_mass_tolerance_unit="Da",
+        ),
+    ).set_index("Glycan")
+
+    orbitrap_gap = (
+        orbitrap.loc["accurate", "candidate_score"]
+        - orbitrap.loc["inaccurate", "candidate_score"]
+    )
+    ion_trap_gap = (
+        ion_trap.loc["accurate", "candidate_score"]
+        - ion_trap.loc["inaccurate", "candidate_score"]
+    )
+
+    assert orbitrap["fragment_mass_accuracy_reliability"].eq(1.0).all()
+    assert ion_trap["fragment_tolerance_equivalent_ppm"].eq(1000.0).all()
+    assert ion_trap["fragment_mass_accuracy_reliability"].iloc[0] == pytest.approx(
+        (20.0 / 1000.0) ** 0.5
+    )
+    assert ion_trap["effective_fragment_mass_accuracy_weight"].iloc[0] < 0.03
+    assert ion_trap_gap < orbitrap_gap
+
+
+def test_target_decoy_competition_rejects_a_target_that_is_outscored():
+    profile = [10, 50, 100, 50, 10]
+    weak = [1, 1, 1, 1, 1]
+    target = _candidate_rows(
+        "25000", [101.0, 201.0], [weak, weak], mass_error=0.019
+    )
+    decoy = _candidate_rows(
+        "25000", [301.0, 401.0], [profile, profile], mass_error=0.001
+    )
+    result = score_and_resolve_candidates(
+        pd.DataFrame(target),
+        _scan_table(profile),
+        _permissive_config(maximum_assignment_q_value=1.0),
+        decoy_matched_data=pd.DataFrame(decoy),
+    )
+    scores = result.candidate_scores
+
+    assert scores["target_decoy_evaluated"].all()
+    assert not scores["target_decoy_winner"].any()
+    assert set(scores["resolution_status"]) == {"decoy_outcompeted"}
+    assert not scores["selected"].any()
+    assert scores["best_decoy_score"].gt(scores["target_assignment_score"]).all()
+    assert not result.decoy_scores.empty
+    assert set(result.target_decoy_competitions["competition_winner"]) == {"decoy"}
+    assert result.decoy_scores["precursor_likelihood_center_ppm"].iloc[0] == (
+        scores["precursor_likelihood_center_ppm"].iloc[0]
+    )
+    assert result.decoy_scores["precursor_likelihood_sigma_ppm"].iloc[0] == (
+        scores["precursor_likelihood_sigma_ppm"].iloc[0]
+    )
+    assert result.decoy_scores["fragment_tolerance_equivalent_ppm"].iloc[0] == (
+        scores["fragment_tolerance_equivalent_ppm"].iloc[0]
+    )
+    assert result.decoy_scores["fragment_mass_accuracy_reliability"].iloc[0] == (
+        scores["fragment_mass_accuracy_reliability"].iloc[0]
+    )
+
+
+def test_target_decoy_q_values_use_the_global_competition_distribution():
+    target_scores = pd.DataFrame(
+        {
+            "_precursor_cluster": np.arange(20),
+            "_rt_feature": np.arange(20),
+            "candidate_rank": 1,
+            "candidate_score": np.linspace(80.0, 60.0, 20),
+            "selected": True,
+            "resolution_status": "uncontested",
+        }
+    )
+    scored, competitions = _apply_target_decoy_statistics(
+        target_scores,
+        pd.DataFrame(),
+        CandidateScoringConfig(maximum_assignment_q_value=0.05),
+    )
+
+    assert scored["assignment_q_value"].eq(0.05).all()
+    assert scored["target_decoy_pass"].all()
+    assert scored["selected"].all()
+    assert competitions["competition_winner"].eq("target").all()

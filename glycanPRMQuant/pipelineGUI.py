@@ -163,7 +163,7 @@ class PipelineGUI(tk.Tk):
             ("Workers", 2),
             ("MS1 ppm tol", 10),
             ("MS2 intensity", 1e2),
-            ("Fragment mass tol", 0.02),
+            ("Fragment tolerance value", 0.02),
             ("Max cleavages", 2),
             ("Smoothing window", 5),
             ("AUC rel. height", 0.7),
@@ -181,7 +181,7 @@ class PipelineGUI(tk.Tk):
         self.n_workers = self._param_vars["Workers"]
         self.ppm_ms1_tol = self._param_vars["MS1 ppm tol"]
         self.intensity_threshold = self._param_vars["MS2 intensity"]
-        self.fragment_mass_tol = self._param_vars["Fragment mass tol"]
+        self.fragment_mass_tol = self._param_vars["Fragment tolerance value"]
         self.fragment_max_cleavages = self._param_vars["Max cleavages"]
         self.smoothing_window = self._param_vars["Smoothing window"]
         self.rel_height = self._param_vars["AUC rel. height"]
@@ -214,6 +214,20 @@ class PipelineGUI(tk.Tk):
         self.fragment_ion_series = tk.StringVar(value="ABCXYZ")
         ttk.Entry(params_frame, textvariable=self.fragment_ion_series, width=14) \
             .grid(column=5, row=selector_row, padx=8, pady=6, sticky="w")
+
+        ttk.Label(params_frame, text="Fragment tolerance unit").grid(
+            column=0, row=selector_row + 1, sticky="w", padx=8, pady=6
+        )
+        self.fragment_mass_tol_unit = tk.StringVar(value="Da")
+        ttk.Combobox(
+            params_frame,
+            textvariable=self.fragment_mass_tol_unit,
+            values=["Da", "ppm"],
+            state="readonly",
+            width=12,
+        ).grid(
+            column=1, row=selector_row + 1, padx=8, pady=6, sticky="w"
+        )
         row += 1
 
         scoring_frame = section("Candidate Scoring")
@@ -223,6 +237,7 @@ class PipelineGUI(tk.Tk):
             ("Minimum candidate score", 35.0),
             ("Minimum evidence difference", 4.0),
             ("Mass-outlier minimum Δppm", 2.0),
+            ("Maximum assignment q-value", 0.05),
         ]
         self._scoring_vars = {}
         for i, (label, default) in enumerate(scoring_params):
@@ -234,6 +249,7 @@ class PipelineGUI(tk.Tk):
         self.candidate_min_score = self._scoring_vars["Minimum candidate score"]
         self.candidate_min_evidence_difference = self._scoring_vars["Minimum evidence difference"]
         self.candidate_mass_outlier_min_delta = self._scoring_vars["Mass-outlier minimum Δppm"]
+        self.candidate_max_q_value = self._scoring_vars["Maximum assignment q-value"]
         row += 1
 
         # Optional mass corrections
@@ -251,6 +267,7 @@ class PipelineGUI(tk.Tk):
         self.skyline_var = tk.BooleanVar(value=False)
         self.smoothing_var = tk.BooleanVar(value=True)
         self.isobaric_resolution_var = tk.BooleanVar(value=True)
+        self.target_decoy_var = tk.BooleanVar(value=True)
 
         ttk.Checkbutton(toggles_frame, text="Overwrite existing outputs", variable=self.overwrite_var) \
             .grid(column=0, row=1, columnspan=4, sticky="w", padx=8, pady=4)
@@ -270,6 +287,11 @@ class PipelineGUI(tk.Tk):
             variable=self.isobaric_resolution_var
         ) \
             .grid(column=0, row=7, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(
+            toggles_frame,
+            text="Enable target-decoy validation",
+            variable=self.target_decoy_var,
+        ).grid(column=0, row=8, columnspan=4, sticky="w", padx=8, pady=4)
         row += 1
 
         # Run and Stop buttons
@@ -356,6 +378,7 @@ class PipelineGUI(tk.Tk):
                 "ppm_ms1_tol": float(self.ppm_ms1_tol.get()),
                 "intensity_threshold": float(self.intensity_threshold.get()),
                 "fragment_mass_tol": float(self.fragment_mass_tol.get()),
+                "fragment_mass_tol_unit": self.fragment_mass_tol_unit.get(),
                 "fragment_ion_series": self.fragment_ion_series.get(),
                 "fragment_max_cleavages": int(self.fragment_max_cleavages.get()),
                 "smoothing_window": int(self.smoothing_window.get()),
@@ -376,6 +399,8 @@ class PipelineGUI(tk.Tk):
                 "candidate_min_score": float(self.candidate_min_score.get()),
                 "candidate_min_evidence_difference": float(self.candidate_min_evidence_difference.get()),
                 "candidate_mass_outlier_min_delta": float(self.candidate_mass_outlier_min_delta.get()),
+                "candidate_max_q_value": float(self.candidate_max_q_value.get()),
+                "enable_target_decoy": bool(self.target_decoy_var.get()),
             }
         except ValueError as e:
             messagebox.showerror("Parameter error", f"Invalid number: {e}")
@@ -410,6 +435,11 @@ class PipelineGUI(tk.Tk):
         if params["fragment_max_cleavages"] < 1:
             messagebox.showerror("Parameter error", "Max cleavages must be >= 1")
             return
+        if params["fragment_mass_tol"] <= 0:
+            messagebox.showerror(
+                "Parameter error", "Fragment tolerance value must be positive"
+            )
+            return
         if params["candidate_min_fragments"] < 1:
             messagebox.showerror("Parameter error", "Minimum candidate fragments must be >= 1")
             return
@@ -422,6 +452,11 @@ class PipelineGUI(tk.Tk):
             or params["candidate_mass_outlier_min_delta"] < 0
         ):
             messagebox.showerror("Parameter error", "Candidate score thresholds cannot be negative")
+            return
+        if not 0 < params["candidate_max_q_value"] <= 1:
+            messagebox.showerror(
+                "Parameter error", "Maximum assignment q-value must be in (0, 1]"
+            )
             return
         database_path = params.pop("database_path")
         params["precursor_db_path"] = database_path
@@ -608,6 +643,7 @@ class PipelineGUI(tk.Tk):
             "ppm_ms1_tol": self.ppm_ms1_tol.get(),
             "intensity_threshold": self.intensity_threshold.get(),
             "fragment_mass_tol": self.fragment_mass_tol.get(),
+            "fragment_mass_tol_unit": self.fragment_mass_tol_unit.get(),
             "fragment_ion_series": self.fragment_ion_series.get(),
             "fragment_max_cleavages": self.fragment_max_cleavages.get(),
             "smoothing_window": self.smoothing_window.get(),
@@ -628,6 +664,8 @@ class PipelineGUI(tk.Tk):
             "candidate_min_score": self.candidate_min_score.get(),
             "candidate_min_evidence_difference": self.candidate_min_evidence_difference.get(),
             "candidate_mass_outlier_min_delta": self.candidate_mass_outlier_min_delta.get(),
+            "candidate_max_q_value": self.candidate_max_q_value.get(),
+            "enable_target_decoy": self.target_decoy_var.get(),
         }
         try:
             with open(self._prefs_path, "w", encoding="utf-8") as f:
@@ -652,6 +690,7 @@ class PipelineGUI(tk.Tk):
             ("ppm_ms1_tol", self.ppm_ms1_tol),
             ("intensity_threshold", self.intensity_threshold),
             ("fragment_mass_tol", self.fragment_mass_tol),
+            ("fragment_mass_tol_unit", self.fragment_mass_tol_unit),
             ("fragment_ion_series", self.fragment_ion_series),
             ("fragment_max_cleavages", self.fragment_max_cleavages),
             ("smoothing_window", self.smoothing_window),
@@ -665,6 +704,7 @@ class PipelineGUI(tk.Tk):
             ("candidate_min_score", self.candidate_min_score),
             ("candidate_min_evidence_difference", self.candidate_min_evidence_difference),
             ("candidate_mass_outlier_min_delta", self.candidate_mass_outlier_min_delta),
+            ("candidate_max_q_value", self.candidate_max_q_value),
         ]:
             if key in prefs:
                 var.set(prefs[key])
@@ -682,6 +722,8 @@ class PipelineGUI(tk.Tk):
             self.smoothing_var.set(prefs["enable_smoothing"])
         if "resolve_isobaric_conflicts" in prefs:
             self.isobaric_resolution_var.set(prefs["resolve_isobaric_conflicts"])
+        if "enable_target_decoy" in prefs:
+            self.target_decoy_var.set(prefs["enable_target_decoy"])
 
 
 if __name__ == "__main__":

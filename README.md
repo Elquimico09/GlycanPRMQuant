@@ -225,8 +225,16 @@ Useful CLI flags:
   composition-level AUC because no winner was selected.
 - `--candidate-min-fragments`, `--candidate-min-explained-intensity`,
   `--candidate-min-score`, and `--candidate-min-evidence-difference` control
-  when an isobaric assignment is resolved. `--candidate-mass-outlier-min-delta`
-  sets the minimum precursor-error separation used by audited pruning.
+  assignment acceptance and isobaric resolution.
+  `--candidate-mass-outlier-min-delta` sets the minimum precursor-error
+  separation used by audited pruning.
+- `--fragment-mass-tol` supplies the numeric product-ion tolerance and
+  `--fragment-mass-tol-unit {da,ppm}` selects its unit. The defaults remain
+  `0.02 Da`; `20 ppm` is a typical high-resolution starting point, while a
+  wider Da tolerance should be validated for low-resolution data.
+- Target-decoy validation is enabled by default. `--candidate-max-q-value`
+  sets the acceptance threshold, `--target-decoy-seed` makes the paired decoy
+  library reproducible, and `--disable-target-decoy` disables this validation.
 - `--quiet` shows warnings/errors only.
 - `-v` and `-vv` increase logging verbosity.
 
@@ -240,7 +248,8 @@ process_mzml_pipeline(
     output_dir="path/to/output_dir",
     ppm_ms1_tol=10,
     intensity_threshold=1e2,
-    fragment_mass_tol=0.02,
+    fragment_mass_tol=20,
+    fragment_mass_tol_unit="ppm",
     fragment_ion_series="BY",
     fragment_max_cleavages=2,
 )
@@ -265,6 +274,7 @@ if __name__ == "__main__":
         n_workers=4,
         ppm_ms1_tol=10,
         fragment_mass_tol=0.02,
+        fragment_mass_tol_unit="Da",
         fragment_ion_series="ABCXYZ",
         fragment_max_cleavages=2,
     )
@@ -383,14 +393,32 @@ composition scorer:
 7. Uses chromatographic coherence only when it is evaluable for every candidate
    in a contested feature. If any candidate is missing it, every candidate gets
    the same neutral coelution component.
+8. Searches a paired charge/adduct-matched shifted-fragment decoy library,
+   performs feature-level target-decoy competition, and estimates assignment
+   FDRs and q-values.
 
-The bounded candidate score is:
+Fragment mass error is measured in the selected tolerance unit. Its score is
+still Gaussian in the median error divided by the tolerance, but its influence
+decreases as the effective tolerance widens. At the feature's median observed
+fragment m/z, the selected tolerance is converted to equivalent ppm and the
+reliability is:
 
 ```text
-100 * (
+R = min(1, sqrt(20 / equivalent_tolerance_ppm))
+```
+
+Thus 20 ppm or tighter receives full reliability. For example, 0.5 Da at m/z
+500 is 1000 ppm and receives `R = 0.141`. The raw mass-accuracy weight is
+`0.15 * R`, and all bounded-score weights are renormalized so the candidate
+score still spans 0-100:
+
+```text
+W = 0.15 * R
+
+100 / (0.85 + W) * (
     0.35 * explained-intensity component
   + 0.20 * distinct-fragment support
-  + 0.15 * fragment mass accuracy
+  + W    * fragment mass accuracy
   + 0.10 * within-feature precursor relative likelihood
   + 0.20 * feature-symmetric chromatographic coherence
 )
@@ -400,11 +428,13 @@ The bounded score remains an absolute evidence-quality check. Candidate ranking
 and runner-up separation use a separate discriminative score:
 
 ```text
-35 * explained-intensity component
-+ 20 * distinct-fragment support
-+ 15 * fragment mass accuracy
+S = 90 / (75 + 15 * R)
+
+S * (35 * explained-intensity component
+   + 20 * distinct-fragment support
+   + 15 * R * fragment mass accuracy
+   + 20 * feature-symmetric chromatographic coherence)
 +  2 * within-feature precursor log-likelihood
-+ 20 * feature-symmetric chromatographic coherence
 ```
 
 This score is centered within each feature, so evidence shared equally by all
@@ -419,15 +449,40 @@ more than both 2 ppm and four calibrated sigmas. The decision is recorded in
 no candidate in a contested feature has a distinguishing fragment, the feature
 receives `no_discriminating_fragment_evidence` and no winner is selected.
 
-A top candidate is selected for composition-level quantification only when it
-passes the minimum fragment, explained-intensity, bounded-score, and
-discriminative-difference checks. Otherwise, conflicting candidates are
-reported with `ambiguous`, `insufficient_evidence`, `possible_coisolation`, or
-`no_discriminating_fragment_evidence` status but receive `selected=False` and
-`quantification_weight=0`. A sole surviving candidate after audited pruning is
-reported as `resolved_after_mass_pruning`. Non-quantified fragment rows are kept
-in `candidate_rows_not_quantified.csv`. Isobaric candidates at separate
-chromatographic peaks remain separate RT features.
+Every assignment, including an uncontested feature, must pass the minimum
+fragment, explained-intensity, and bounded-score checks. Contested assignments
+must additionally pass the discriminative-difference rule. Otherwise they
+receive `insufficient_evidence`, `ambiguous`, `possible_coisolation`, or
+`no_discriminating_fragment_evidence` and remain unselected. A sole surviving
+candidate after audited pruning is reported as `resolved_after_mass_pruning`.
+
+For target-decoy validation, each target product ion receives a reproducible
+random neutral-mass shift between 1 and 30 Da; the m/z shift is divided by ion
+charge. Shifts overlapping any target theoretical ion within the selected Da
+or ppm fragment tolerance are rejected and regenerated. Target and decoy
+libraries preserve
+the same precursor assignments, fragment counts, structures, ion series,
+charges, adducts, and neutral-loss counts, and are searched and structure-ranked
+separately so decoys do not change target specificity weights. Decoys reuse
+the target run's precursor-error calibration because each paired decoy has the
+same precursor hypothesis and differs only in its shifted fragment evidence.
+For a shared feature, decoys also reuse the target feature's tolerance
+reliability so both sides of the competition give mass accuracy equal weight.
+
+The selected target and selected decoy compete within each RT feature using the
+bounded candidate score. At score threshold `s`, the estimated FDR is:
+
+```text
+(number of decoy-winning features at or above s + 1)
+/ max(number of target-winning features at or above s, 1)
+```
+
+Monotone q-values are calculated across score thresholds. A preliminarily
+selected target is removed when the decoy out-scores it or its q-value exceeds
+the configured maximum. The `+1` correction is deliberately conservative; at
+the default q-value of `0.05`, at least 20 target-winning features are needed
+before any assignment can pass. Non-quantified fragment rows are kept in
+`candidate_rows_not_quantified.csv`.
 
 ## Important Parameters
 
@@ -438,7 +493,10 @@ chromatographic peaks remain separate RT features.
   calculation.
 - `intensity_threshold`: minimum MS2 fragment intensity used during extraction
   and matching.
-- `fragment_mass_tol`: fragment m/z tolerance in Da.
+- `fragment_mass_tol`: numeric fragment m/z tolerance value; default `0.02`.
+- `fragment_mass_tol_unit`: `Da` or `ppm`; default `Da`. The same unit/value is
+  used for target matching, decoy matching, overlap prevention, near-duplicate
+  peak clustering, and fragment mass-accuracy scoring.
 - `fragment_ion_series`: allowed theoretical fragment ion series. Use any
   combination of `A`, `B`, `C`, `X`, `Y`, `Z`.
 - `fragment_max_cleavages`: maximum number of cleavages during theoretical
@@ -448,8 +506,8 @@ chromatographic peaks remain separate RT features.
 - `rel_height`: AUC boundary relative height.
 - `rel_height_mode`: `prominence` or `height`.
 - `skyline_transition`: write a Skyline transition list when `True`.
-- `candidate_min_fragments`: minimum distinct fragments needed to resolve a
-  conflict; default `2`.
+- `candidate_min_fragments`: minimum distinct fragments needed to accept any
+  assignment; default `2`.
 - `candidate_min_explained_intensity`: minimum specificity-weighted explained
   intensity fraction; default `0.005`.
 - `candidate_min_score`: minimum bounded candidate score; default `35`.
@@ -459,6 +517,10 @@ chromatographic peaks remain separate RT features.
 - `candidate_mass_outlier_min_delta`: absolute floor, in ppm, for pruning a
   zero-specific-evidence candidate. The effective threshold is the larger of
   this value and four run-calibrated precursor sigmas; default `2`.
+- `enable_target_decoy`: generate and search the paired shifted-fragment decoy
+  library; default `True`.
+- `candidate_max_q_value`: maximum assignment q-value; default `0.05`.
+- `target_decoy_seed`: reproducible decoy-generation seed; default `1729`.
 
 ## Outputs
 
@@ -471,10 +533,18 @@ Each sample output directory can include:
 - `candidate_scores.csv`
   Candidate-level component scores, RT-feature boundaries, runner-up metrics,
   precursor calibration and pruning audit fields, coelution comparability,
-  discriminative evidence, `reported`/`selected` flags, quantification weight,
-  and resolution status for every composition considered. Here,
+  discriminative evidence, selected tolerance and equivalent ppm, mass-accuracy
+  reliability/effective weights, `reported`/`selected` flags, quantification
+  weight, and resolution status for every composition considered. Here,
   `selected=True` specifically means that the candidate is eligible for
   composition-level quantification.
+- `decoy_fragment_matches.csv`
+  Raw observed-fragment matches to the shifted-ion decoy library.
+- `decoy_candidate_scores.csv`
+  Candidate-level scores calculated independently from decoy matches.
+- `target_decoy_competitions.csv`
+  Complete feature-level target and decoy scores, competition winner, estimated
+  FDR, q-value, and pass/fail result, including decoy-only winning features.
 - `candidate_rows_not_quantified.csv`
   Matched fragment rows for losing or unresolved candidate hypotheses. These
   rows remain available for review but are excluded from glycan AUC outputs.

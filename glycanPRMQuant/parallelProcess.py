@@ -51,6 +51,10 @@ def _process_one_file(
     candidate_min_score: float = 35.0,
     candidate_min_evidence_difference: float = 4.0,
     candidate_mass_outlier_min_delta: float = 2.0,
+    enable_target_decoy: bool = True,
+    candidate_max_q_value: float = 0.05,
+    target_decoy_seed: int = 1729,
+    fragment_mass_tol_unit: str = "Da",
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -82,6 +86,7 @@ def _process_one_file(
                 ppm_ms1_tol=ppm_ms1_tol,
                 intensity_threshold=intensity_threshold,
                 fragment_mass_tol=fragment_mass_tol,
+                fragment_mass_tol_unit=fragment_mass_tol_unit,
                 fragment_ion_series=fragment_ion_series,
                 fragment_max_cleavages=fragment_max_cleavages,
                 smoothing_window=smoothing_window,
@@ -100,6 +105,9 @@ def _process_one_file(
                 candidate_min_score=candidate_min_score,
                 candidate_min_evidence_difference=candidate_min_evidence_difference,
                 candidate_mass_outlier_min_delta=candidate_mass_outlier_min_delta,
+                enable_target_decoy=enable_target_decoy,
+                candidate_max_q_value=candidate_max_q_value,
+                target_decoy_seed=target_decoy_seed,
                 precursor_db_path=precursor_db_path,
                 structure_db_path=structure_db_path
             )
@@ -146,6 +154,10 @@ def run_parallel_pipeline(
     candidate_min_score: float = 35.0,
     candidate_min_evidence_difference: float = 4.0,
     candidate_mass_outlier_min_delta: float = 2.0,
+    enable_target_decoy: bool = True,
+    candidate_max_q_value: float = 0.05,
+    target_decoy_seed: int = 1729,
+    fragment_mass_tol_unit: str = "Da",
 ):
     """
     Discover all Thermo .raw or .mzML files in `input_dir` (or use an explicit list) and process them.
@@ -212,6 +224,10 @@ def run_parallel_pipeline(
                     candidate_min_score,
                     candidate_min_evidence_difference,
                     candidate_mass_outlier_min_delta,
+                    enable_target_decoy,
+                    candidate_max_q_value,
+                    target_decoy_seed,
+                    fragment_mass_tol_unit,
                 ): path for path in ms_files
             }
             for fut in as_completed(futures):

@@ -322,6 +322,10 @@ def process_mzml_pipeline(
     candidate_min_score: float = 35.0,
     candidate_min_evidence_difference: float = 4.0,
     candidate_mass_outlier_min_delta: float = 2.0,
+    enable_target_decoy: bool = True,
+    candidate_max_q_value: float = 0.05,
+    target_decoy_seed: int = 1729,
+    fragment_mass_tol_unit: str = "Da",
 ):
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
     os.makedirs(output_dir, exist_ok=True)
@@ -331,6 +335,11 @@ def process_mzml_pipeline(
         "Isobaric precursor conflict resolution: %s (%g ppm)",
         "enabled" if resolve_isobaric_conflicts else "disabled",
         ISOBARIC_RESOLUTION_PPM
+    )
+    logger.info(
+        "Fragment matching tolerance: %g %s",
+        fragment_mass_tol,
+        fragment_mass_tol_unit,
     )
 
     # 1) Extract MS2
@@ -390,7 +399,10 @@ def process_mzml_pipeline(
             intensity_threshold=intensity_threshold,
             ion_series=fragment_ion_series,
             max_cleavages=fragment_max_cleavages,
-            db_path=structure_db_path
+            db_path=structure_db_path,
+            generate_decoys=enable_target_decoy,
+            decoy_seed=target_decoy_seed,
+            fragment_mass_tol_unit=fragment_mass_tol_unit,
         )
         if matched_ms2.empty:
             logger.info(f"No MS2 fragments for {glycan!r}")
@@ -408,28 +420,57 @@ def process_mzml_pipeline(
 
     # Score and resolve precursor conflicts across glycans. Ambiguous and
     # possibly coisolated candidates are retained rather than forcing a winner.
-    all_df = pd.concat(all_matched, ignore_index=True)
+    combined_matches = pd.concat(all_matched, ignore_index=True)
+    if 'is_decoy' not in combined_matches.columns:
+        combined_matches['is_decoy'] = False
+    decoy_df = combined_matches.loc[combined_matches['is_decoy']].copy()
+    all_df = combined_matches.loc[~combined_matches['is_decoy']].copy()
+    if all_df.empty:
+        logger.info("No target MS2 fragment matches; done.")
+        return
+    if enable_target_decoy:
+        decoy_match_path = os.path.join(output_dir, "decoy_fragment_matches.csv")
+        decoy_df.to_csv(decoy_match_path, index=False)
+        logger.info(
+            "Wrote %d matched decoy fragment row(s) to %s",
+            len(decoy_df),
+            decoy_match_path,
+        )
     conflict_count = _count_precursor_conflicts(all_df, ppm_tol=ISOBARIC_RESOLUTION_PPM)
     rows_before = len(all_df)
     glycans_before = all_df['Glycan'].nunique()
     scoring_config = CandidateScoringConfig(
         precursor_cluster_ppm=ISOBARIC_RESOLUTION_PPM,
         fragment_mass_tolerance=fragment_mass_tol,
+        fragment_mass_tolerance_unit=fragment_mass_tol_unit,
         minimum_distinct_fragments=candidate_min_fragments,
         minimum_explained_intensity=candidate_min_explained_intensity,
         minimum_candidate_score=candidate_min_score,
         minimum_discriminative_evidence_difference=candidate_min_evidence_difference,
         mass_outlier_min_delta_ppm=candidate_mass_outlier_min_delta,
+        maximum_assignment_q_value=candidate_max_q_value,
     )
     scoring_result = score_and_resolve_candidates(
         all_df,
         scan_data=ms2_data,
         config=scoring_config,
         resolve=resolve_isobaric_conflicts,
+        decoy_matched_data=decoy_df if enable_target_decoy else None,
     )
     all_df = scoring_result.resolved_rows
     score_path = os.path.join(output_dir, "candidate_scores.csv")
     scoring_result.candidate_scores.to_csv(score_path, index=False)
+    if enable_target_decoy:
+        decoy_score_path = os.path.join(output_dir, "decoy_candidate_scores.csv")
+        scoring_result.decoy_scores.to_csv(decoy_score_path, index=False)
+        competition_path = os.path.join(
+            output_dir, "target_decoy_competitions.csv"
+        )
+        scoring_result.target_decoy_competitions.to_csv(
+            competition_path, index=False
+        )
+        logger.info("Wrote decoy candidate scores to %s", decoy_score_path)
+        logger.info("Wrote target-decoy competitions to %s", competition_path)
     not_quantified = scoring_result.reported_rows.loc[
         ~scoring_result.reported_rows['selected']
     ].copy()

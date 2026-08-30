@@ -1,3 +1,4 @@
+import hashlib
 import logging
 
 import pandas as pd
@@ -5,6 +6,13 @@ import numpy as np
 from scipy.spatial import cKDTree
 from .constants import DEFAULT_PRECURSOR_DB, METHANOL_MASS
 from .fragment_structure import fragment_glycan
+from .mass_tolerance import (
+    conservative_query_radius_da,
+    mass_error_ppm,
+    normalize_tolerance_unit,
+    validate_tolerance,
+    within_tolerance,
+)
 import os
 
 logger = logging.getLogger(__name__)
@@ -185,6 +193,209 @@ def _build_adduct_table(
     return adduct_df
 
 
+def _build_decoy_adduct_table(
+    target_adducts: pd.DataFrame,
+    fragment_mass_tolerance: float,
+    decoy_seed: int,
+    fragment_mass_tolerance_unit: str = "Da",
+) -> pd.DataFrame:
+    """Create one deterministic, charge-aware shifted ion per target ion."""
+    if target_adducts.empty:
+        return target_adducts.copy()
+    fragment_mass_tolerance, fragment_mass_tolerance_unit = validate_tolerance(
+        fragment_mass_tolerance, fragment_mass_tolerance_unit
+    )
+    target_mzs = np.sort(target_adducts['Theo_mz'].to_numpy(dtype=float))
+
+    def collides_with_target(mz: float) -> bool:
+        radius = float(
+            conservative_query_radius_da(
+                np.asarray([mz]),
+                fragment_mass_tolerance,
+                fragment_mass_tolerance_unit,
+            )[0]
+        )
+        left = int(np.searchsorted(target_mzs, mz - radius, side="left"))
+        right = int(np.searchsorted(target_mzs, mz + radius, side="right"))
+        neighbors = target_mzs[left:right]
+        return bool(
+            neighbors.size
+            and np.any(
+                within_tolerance(
+                    mz,
+                    neighbors,
+                    fragment_mass_tolerance,
+                    fragment_mass_tolerance_unit,
+                )
+            )
+        )
+
+    decoys = target_adducts.copy()
+    shifted_mzs = []
+    neutral_shifts = []
+    for _, row in decoys.iterrows():
+        stable_key = "|".join(
+            [
+                str(decoy_seed),
+                str(row.get('IUPAC', '')),
+                str(row.get('Fragment', '')),
+                str(row.get('FragmentType', '')),
+                str(row.get('fragment_annotation', '')),
+                str(row.get('Adduct', '')),
+            ]
+        )
+        charge = max(int(row['Charge']), 1)
+        shifted_mz = np.nan
+        neutral_shift = np.nan
+        for attempt in range(32):
+            digest = hashlib.sha256(
+                f"{stable_key}|{attempt}".encode("utf-8")
+            ).digest()
+            unit_interval = int.from_bytes(digest[:8], "big") / float(2**64)
+            candidate_shift = 1.0 + 29.0 * unit_interval
+            candidate_mz = float(row['Theo_mz']) + candidate_shift / charge
+            if not collides_with_target(candidate_mz):
+                shifted_mz = candidate_mz
+                neutral_shift = candidate_shift
+                break
+        if not np.isfinite(shifted_mz):
+            # A dense target library can occasionally consume all hashed
+            # proposals. Scan the allowed window so a paired ion is never
+            # silently dropped from the decoy library.
+            for candidate_shift in np.linspace(1.0, 30.0, 29001):
+                candidate_mz = float(row['Theo_mz']) + candidate_shift / charge
+                if not collides_with_target(candidate_mz):
+                    shifted_mz = candidate_mz
+                    neutral_shift = float(candidate_shift)
+                    break
+        if not np.isfinite(shifted_mz):
+            raise ValueError(
+                "Could not place a shifted decoy ion outside the target "
+                "fragment tolerance within the 1-30 Da shift window"
+            )
+        shifted_mzs.append(shifted_mz)
+        neutral_shifts.append(neutral_shift)
+
+    decoys['Theo_mz'] = shifted_mzs
+    decoys['decoy_neutral_mass_shift'] = neutral_shifts
+    decoys = decoys.dropna(subset=['Theo_mz']).reset_index(drop=True)
+    decoys['is_decoy'] = True
+    return decoys
+
+
+def _match_adduct_library(
+    ms2f: pd.DataFrame,
+    adduct_df: pd.DataFrame,
+    fragment_mass_tolerance: float,
+    is_decoy: bool,
+    fragment_mass_tolerance_unit: str = "Da",
+) -> pd.DataFrame:
+    """Match one target or decoy product-ion library to the retained spectra."""
+    if adduct_df.empty:
+        return pd.DataFrame()
+    fragment_mass_tolerance, fragment_mass_tolerance_unit = validate_tolerance(
+        fragment_mass_tolerance, fragment_mass_tolerance_unit
+    )
+    theo_mzs = adduct_df['Theo_mz'].to_numpy(dtype=float)
+    tree = cKDTree(theo_mzs.reshape(-1, 1))
+    obs_mzs = ms2f['fragment_mz'].to_numpy(dtype=float)
+    query_radii = conservative_query_radius_da(
+        obs_mzs, fragment_mass_tolerance, fragment_mass_tolerance_unit
+    )
+    neighbors = tree.query_ball_point(
+        obs_mzs.reshape(-1, 1), r=query_radii
+    )
+    base_cols = [
+        'scan_number', 'rt', 'precursor_mz', 'precursor_intensity',
+        'fragment_intensity', 'Glycan', 'PrecursorAdduct', 'database_mz',
+        'precursor_ppm_error'
+    ]
+    base_data = ms2f[base_cols].to_dict('records')
+    matched = []
+    for i, nbrs in enumerate(neighbors):
+        if not nbrs:
+            continue
+        hits = adduct_df.iloc[nbrs].copy()
+        hits = hits.loc[
+            hits['_PrecursorAdduct'].eq(str(base_data[i]['PrecursorAdduct']))
+        ]
+        if hits.empty:
+            continue
+        hits['mz_diff'] = np.abs(hits['Theo_mz'].to_numpy() - obs_mzs[i])
+        hits['ppm_error'] = mass_error_ppm(
+            obs_mzs[i], hits['Theo_mz'].to_numpy(dtype=float)
+        )
+        hits = hits.loc[
+            within_tolerance(
+                obs_mzs[i],
+                hits['Theo_mz'].to_numpy(dtype=float),
+                fragment_mass_tolerance,
+                fragment_mass_tolerance_unit,
+            )
+        ]
+        if hits.empty:
+            continue
+        hits = hits.sort_values('mz_diff').drop_duplicates(
+            subset=['IUPAC'], keep='first'
+        )
+        for _, hit in hits.iterrows():
+            diff = float(hit['mz_diff'])
+            row = dict(base_data[i])
+            row.update({
+                'Fragment': hit['fragment_annotation'],
+                'BaseFragment': hit['Fragment'],
+                'FragmentType': hit['FragmentType'],
+                'fragment_annotation': hit['fragment_annotation'],
+                'fragment_iupac': hit['fragment_iupac'],
+                'contains_neuac': bool(hit['contains_neuac']),
+                'neutral_loss': hit['neutral_loss'],
+                'Charge': int(hit['Charge']),
+                'Fragment_mz': float(hit['Theo_mz']),
+                'observed_fragment_mz': float(obs_mzs[i]),
+                'theoretical_fragment_mz': float(hit['Theo_mz']),
+                'mz_diff': diff,
+                'ppm_error': float(hit['ppm_error']),
+                'fragment_mass_tolerance_value': fragment_mass_tolerance,
+                'fragment_mass_tolerance_unit': fragment_mass_tolerance_unit,
+                'Adduct': hit['Adduct'],
+                'IUPAC': hit['IUPAC'],
+                'NumericalComposition': hit['NumericalComposition'],
+                'Composition': hit['Composition'],
+                'is_decoy': bool(is_decoy),
+                'decoy_neutral_mass_shift': hit.get(
+                    'decoy_neutral_mass_shift', np.nan
+                ),
+            })
+            matched.append(row)
+    return pd.DataFrame(matched)
+
+
+def _select_best_iupac(matches: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series | None]:
+    """Apply the same structure-level ranking to target or decoy matches."""
+    if matches.empty:
+        return matches.copy(), None
+    scores = (
+        matches.groupby('IUPAC')
+        .agg(
+            match_count=('Fragment', 'size'),
+            unique_fragments=('Fragment', 'nunique'),
+            total_intensity=('fragment_intensity', 'sum'),
+            mean_abs_ppm=('ppm_error', lambda s: float(np.mean(np.abs(s)))),
+        )
+        .reset_index()
+        .sort_values(
+            ['match_count', 'unique_fragments', 'total_intensity', 'mean_abs_ppm'],
+            ascending=[False, False, False, True]
+        )
+    )
+    best = scores.iloc[0]
+    selected = matches.loc[matches['IUPAC'] == best['IUPAC']].copy()
+    selected['IUPAC_match_count'] = int(best['match_count'])
+    selected['IUPAC_unique_fragments'] = int(best['unique_fragments'])
+    selected['IUPAC_total_intensity'] = float(best['total_intensity'])
+    return selected, best
+
+
 def _normalize_ion_series(ion_series: str) -> str:
     ion_series = (ion_series or "ABCXYZ").upper().replace(",", "").replace(" ", "")
     allowed = set("ABCXYZ")
@@ -208,7 +419,12 @@ def _normalize_max_cleavages(max_cleavages: int) -> int:
         raise ValueError("Max cleavages must be >= 1")
     return value
 
-def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
+def cluster_1d(
+    mzs: np.ndarray,
+    tol: float,
+    tolerance_unit: str = "Da",
+    maximum_cluster_gap_da: float | None = None,
+) -> np.ndarray:
     """
     Fast 1D clustering: sort mzs, start a new cluster whenever the gap > tol.
     Returns an array of cluster labels in the original order.
@@ -219,8 +435,17 @@ def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
     sorted_mzs = mzs[idx]
     labels = np.zeros_like(sorted_mzs, dtype=int)
     cl = 0
+    tol, tolerance_unit = validate_tolerance(tol, tolerance_unit)
     for i in range(1, len(sorted_mzs)):
-        if sorted_mzs[i] - sorted_mzs[i-1] > tol:
+        gap = sorted_mzs[i] - sorted_mzs[i - 1]
+        same_cluster = bool(
+            within_tolerance(
+                sorted_mzs[i], sorted_mzs[i - 1], tol, tolerance_unit
+            )
+        )
+        if maximum_cluster_gap_da is not None:
+            same_cluster = same_cluster and gap <= maximum_cluster_gap_da
+        if not same_cluster:
             cl += 1
         labels[i] = cl
     # invert the sort
@@ -231,7 +456,8 @@ def cluster_1d(mzs: np.ndarray, tol: float) -> np.ndarray:
 
 def preprocess_ms2_data(
     ms2: pd.DataFrame,
-    fragment_mass_tol: float = 0.1
+    fragment_mass_tol: float = 0.1,
+    fragment_mass_tol_unit: str = "Da",
 ) -> pd.DataFrame:
     """
     For each (scan_number, precursor_mz) group, cluster fragment_mz via cluster_1d
@@ -241,7 +467,12 @@ def preprocess_ms2_data(
     grouped = ms2.groupby(['scan_number', 'precursor_mz'])
     for (scan, prec), grp in grouped:
         mzs = grp['fragment_mz'].to_numpy()
-        labels = cluster_1d(mzs, fragment_mass_tol)
+        labels = cluster_1d(
+            mzs,
+            fragment_mass_tol,
+            fragment_mass_tol_unit,
+            maximum_cluster_gap_da=0.1,
+        )
         for cl in np.unique(labels):
             sub = grp.iloc[labels == cl]
             row = sub.iloc[0].copy()
@@ -262,7 +493,10 @@ def matchMS2(
     ppm_tol: float = 10,
     db_path: str = None,
     ion_series: str = "ABCXYZ",
-    max_cleavages: int = 2
+    max_cleavages: int = 2,
+    generate_decoys: bool = False,
+    decoy_seed: int = 1729,
+    fragment_mass_tol_unit: str = "Da",
 ) -> pd.DataFrame:
     """
     Vectorized MS2 matching using cKDTree on theoretical fragments generated
@@ -275,13 +509,20 @@ def matchMS2(
     ions are additionally considered for precursor assignments labeled H+NH4
     or 2NH4.
 
-    :param fragment_mass_tol: Fragment m/z matching tolerance in Da.
+    :param fragment_mass_tol: Numeric fragment m/z matching tolerance.
+    :param fragment_mass_tol_unit: Fragment tolerance unit, ``Da`` or ``ppm``.
     :param ppm_tol: Precursor matching tolerance in ppm.
     :param db_path: Path to N-glycan database CSV/Excel file. If None, uses default.
+    :param generate_decoys: Also return matches to a paired shifted-ion library.
+    :param decoy_seed: Reproducible seed used to construct fragment mass shifts.
     """
     if db_path is None:
         db_path = DEFAULT_PRECURSOR_DB
 
+    fragment_mass_tol, fragment_mass_tol_unit = validate_tolerance(
+        fragment_mass_tol, fragment_mass_tol_unit
+    )
+    fragment_mass_tol_unit = normalize_tolerance_unit(fragment_mass_tol_unit)
     ion_series = _normalize_ion_series(ion_series)
     max_cleavages = _normalize_max_cleavages(max_cleavages)
     precursor_composition = _normalize_glycan(precursor_composition)
@@ -350,7 +591,11 @@ def matchMS2(
     )
 
     # 4) cluster fragments within each spectrum
-    ms2f = preprocess_ms2_data(ms2f, fragment_mass_tol=0.1)
+    ms2f = preprocess_ms2_data(
+        ms2f,
+        fragment_mass_tol=fragment_mass_tol,
+        fragment_mass_tol_unit=fragment_mass_tol_unit,
+    )
 
     # 5) perform vectorized adduct matching against all candidate IUPAC structures
     adduct_df = _build_adduct_table(dbf, ms2f['PrecursorAdduct'].unique())
@@ -358,85 +603,46 @@ def matchMS2(
         logger.info(f"No theoretical fragment adducts for {precursor_composition}")
         return pd.DataFrame()
 
-    theo_mzs = adduct_df['Theo_mz'].to_numpy()
-    tree = cKDTree(theo_mzs.reshape(-1, 1))
-    obs_mzs = ms2f['fragment_mz'].to_numpy()
-    neighbors = tree.query_ball_point(obs_mzs.reshape(-1, 1), r=fragment_mass_tol)
+    target_matches = _match_adduct_library(
+        ms2f,
+        adduct_df,
+        fragment_mass_tol,
+        is_decoy=False,
+        fragment_mass_tolerance_unit=fragment_mass_tol_unit,
+    )
+    target_out, target_best = _select_best_iupac(target_matches)
 
-    matched = []
-    base_cols = [
-        'scan_number', 'rt', 'precursor_mz', 'precursor_intensity',
-        'fragment_intensity', 'Glycan', 'PrecursorAdduct', 'database_mz',
-        'precursor_ppm_error'
-    ]
-    base_data = ms2f[base_cols].to_dict('records')
+    decoy_out = pd.DataFrame()
+    if generate_decoys:
+        decoy_adducts = _build_decoy_adduct_table(
+            adduct_df,
+            fragment_mass_tolerance=fragment_mass_tol,
+            decoy_seed=int(decoy_seed),
+            fragment_mass_tolerance_unit=fragment_mass_tol_unit,
+        )
+        decoy_matches = _match_adduct_library(
+            ms2f,
+            decoy_adducts,
+            fragment_mass_tol,
+            is_decoy=True,
+            fragment_mass_tolerance_unit=fragment_mass_tol_unit,
+        )
+        decoy_out, _ = _select_best_iupac(decoy_matches)
 
-    for i, nbrs in enumerate(neighbors):
-        if not nbrs:
-            continue
-        hits = adduct_df.iloc[nbrs].copy()
-        hits = hits.loc[
-            hits['_PrecursorAdduct'].eq(str(base_data[i]['PrecursorAdduct']))
-        ]
-        if hits.empty:
-            continue
-        hits['mz_diff'] = np.abs(hits['Theo_mz'].to_numpy() - obs_mzs[i])
-        hits = hits.sort_values('mz_diff').drop_duplicates(subset=['IUPAC'], keep='first')
-
-        for _, hit in hits.iterrows():
-            diff = float(hit['mz_diff'])
-            row = dict(base_data[i])
-            row.update({
-                'Fragment': hit['fragment_annotation'],
-                'BaseFragment': hit['Fragment'],
-                'FragmentType': hit['FragmentType'],
-                'fragment_annotation': hit['fragment_annotation'],
-                'fragment_iupac': hit['fragment_iupac'],
-                'contains_neuac': bool(hit['contains_neuac']),
-                'neutral_loss': hit['neutral_loss'],
-                'Charge': int(hit['Charge']),
-                'Fragment_mz': float(hit['Theo_mz']),
-                'observed_fragment_mz': float(obs_mzs[i]),
-                'theoretical_fragment_mz': float(hit['Theo_mz']),
-                'mz_diff': diff,
-                'ppm_error': float(diff / hit['Theo_mz'] * 1e6),
-                'Adduct': hit['Adduct'],
-                'IUPAC': hit['IUPAC'],
-                'NumericalComposition': hit['NumericalComposition'],
-                'Composition': hit['Composition'],
-            })
-            matched.append(row)
-
-    if not matched:
-        logger.info(f"No fragments matched for {precursor_composition}")
+    if target_out.empty and decoy_out.empty:
+        logger.info(f"No target or decoy fragments matched for {precursor_composition}")
         return pd.DataFrame()
-
-    all_matches = pd.DataFrame(matched)
-    scores = (
-        all_matches.groupby('IUPAC')
-        .agg(
-            match_count=('Fragment', 'size'),
-            unique_fragments=('Fragment', 'nunique'),
-            total_intensity=('fragment_intensity', 'sum'),
-            mean_abs_ppm=('ppm_error', lambda s: float(np.mean(np.abs(s)))),
+    if target_best is not None:
+        logger.info(
+            f"Selected IUPAC for {precursor_composition}: {target_best['IUPAC']}"
         )
-        .reset_index()
-        .sort_values(
-            ['match_count', 'unique_fragments', 'total_intensity', 'mean_abs_ppm'],
-            ascending=[False, False, False, True]
+        logger.info(
+            f"Structure score: {int(target_best['match_count'])} matches, "
+            f"{int(target_best['unique_fragments'])} unique fragments"
         )
-    )
-    best = scores.iloc[0]
-    out = all_matches.loc[all_matches['IUPAC'] == best['IUPAC']].copy()
-    out['IUPAC_match_count'] = int(best['match_count'])
-    out['IUPAC_unique_fragments'] = int(best['unique_fragments'])
-    out['IUPAC_total_intensity'] = float(best['total_intensity'])
-
-    logger.info(f"Selected IUPAC for {precursor_composition}: {best['IUPAC']}")
-    logger.info(
-        f"Structure score: {int(best['match_count'])} matches, "
-        f"{int(best['unique_fragments'])} unique fragments"
-    )
-    logger.info(f"Matched {len(out)} fragments for {precursor_composition}:")
-    logger.info("\n%s", out['Charge'].value_counts().rename_axis('Charge').to_string())
-    return out
+        logger.info(f"Matched {len(target_out)} target fragments for {precursor_composition}")
+    if generate_decoys:
+        logger.info(
+            f"Matched {len(decoy_out)} paired decoy fragments for {precursor_composition}"
+        )
+    return pd.concat([target_out, decoy_out], ignore_index=True, sort=False)

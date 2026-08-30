@@ -74,12 +74,15 @@ Main flow:
    NeuAc-containing fragment substructures also receive charge-aware `-CH3OH`
    neutral-loss variants.
 4) Filter MS2 rows to those whose precursor matches the MS1 hits for the glycan.
-5) Cluster fragments per scan using `preprocess_ms2_data` (reduces near-duplicate peaks).
-6) Use a KD-tree to match observed fragment m/z to theoretical m/z within `fragment_mass_tol`.
+5) Cluster fragments per scan using the selected Da/ppm tolerance, capped at a
+   0.1 Da gap so a broad low-resolution match window does not over-merge peaks.
+6) Use a KD-tree to match observed fragment m/z to theoretical m/z within
+   `fragment_mass_tol` and `fragment_mass_tol_unit`.
 
 Outputs a DataFrame with fragment assignments, including `Fragment`, `Charge`, `Fragment_mz`, `mz_diff`, and `ppm_error`.
 
-If fragment matching is too strict or too loose, adjust `fragment_mass_tol`, the clustering tolerance in `preprocess_ms2_data`, or the adduct table.
+If fragment matching is too strict or too loose, adjust both the numeric
+`fragment_mass_tol` and its `fragment_mass_tol_unit` (`Da` or `ppm`).
 
 ### `glycanPRMQuant/plotFragmentIntensity.py`
 
