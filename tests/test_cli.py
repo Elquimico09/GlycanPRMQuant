@@ -74,6 +74,34 @@ def test_run_parser_accepts_candidate_resolution_thresholds():
     assert args.target_decoy_seed == 42
 
 
+@pytest.mark.parametrize("filetype", ["png", "pdf", "svg"])
+def test_run_parser_accepts_figure_filetypes(filetype):
+    parser = build_parser()
+
+    args = parser.parse_args(
+        ["run", "sample.mzML", "out", "--figure-filetype", filetype]
+    )
+
+    assert args.figure_filetype == filetype
+
+
+def test_run_parser_defaults_to_pdf_figures():
+    parser = build_parser()
+
+    args = parser.parse_args(["run", "sample.mzML", "out"])
+
+    assert args.figure_filetype == "pdf"
+
+
+def test_run_parser_rejects_unsupported_figure_filetype():
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            ["run", "sample.mzML", "out", "--figure-filetype", "jpg"]
+        )
+
+
 @pytest.mark.parametrize(
     "removed_option",
     [

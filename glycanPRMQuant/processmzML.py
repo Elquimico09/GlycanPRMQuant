@@ -18,6 +18,16 @@ from scipy.signal import savgol_filter
 
 logger = logging.getLogger(__name__)
 ISOBARIC_RESOLUTION_PPM = 20.0
+SUPPORTED_FIGURE_FILETYPES = ("png", "pdf", "svg")
+
+
+def normalize_figure_filetype(filetype: str) -> str:
+    """Return a supported, extension-safe figure file type."""
+    normalized = str(filetype or "").strip().lower().lstrip(".")
+    if normalized not in SUPPORTED_FIGURE_FILETYPES:
+        choices = ", ".join(SUPPORTED_FIGURE_FILETYPES)
+        raise ValueError(f"Figure file type must be one of: {choices}")
+    return normalized
 
 def _smooth_signal(y, method: str, window: int):
     if not window or window <= 0:
@@ -326,7 +336,9 @@ def process_mzml_pipeline(
     candidate_max_q_value: float = 0.05,
     target_decoy_seed: int = 1729,
     fragment_mass_tol_unit: str = "Da",
+    figure_filetype: str = "pdf",
 ):
+    figure_filetype = normalize_figure_filetype(figure_filetype)
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
     os.makedirs(output_dir, exist_ok=True)
     images_dir = os.path.join(output_dir, 'images')
@@ -341,6 +353,7 @@ def process_mzml_pipeline(
         fragment_mass_tol,
         fragment_mass_tol_unit,
     )
+    logger.info("Figure file type: %s", figure_filetype)
 
     # 1) Extract MS2
     logger.info("Extracting MS2 data from %s", mzml_file)
@@ -509,47 +522,54 @@ def process_mzml_pipeline(
         logger.info(f"Wrote {len(sub)} MS2 matches to {csv_path}")
 
         # Chromatograms per fragment (legacy view)
-        chrom_frag_pdf = os.path.join(images_dir, f"ms2_{glycan}.pdf")
+        chrom_frag_path = os.path.join(images_dir, f"ms2_{glycan}.{figure_filetype}")
         try:
             plot_ms2_fragments(csv_path, window=effective_window,
-                               top_n=fragment_top_n, save_path=chrom_frag_pdf,
+                               top_n=fragment_top_n, save_path=chrom_frag_path,
                                figsize=(6.2, 4),
                                group_col='Fragment',
                                smoothing_method=smoothing_method)
-            logger.info(f"Saved fragment-level chromatogram to {chrom_frag_pdf}")
+            logger.info(f"Saved fragment-level chromatogram to {chrom_frag_path}")
         except Exception as e:
             logger.warning(f"Fragment chromatogram failed: {e}")
 
         # Chromatogram per precursor adduct
         if enable_adduct_plots:
-            chrom_adduct_pdf = os.path.join(images_dir, f"ms2_{glycan}_by_precursor_adduct.pdf")
+            chrom_adduct_path = os.path.join(
+                images_dir,
+                f"ms2_{glycan}_by_precursor_adduct.{figure_filetype}",
+            )
             try:
                 plot_ms2_fragments(csv_path, window=effective_window,
-                                   top_n=None, save_path=chrom_adduct_pdf,
+                                   top_n=None, save_path=chrom_adduct_path,
                                    group_col='PrecursorAdduct',
                                    smoothing_method=smoothing_method)
-                logger.info(f"Saved precursor-adduct chromatogram to {chrom_adduct_pdf}")
+                logger.info(f"Saved precursor-adduct chromatogram to {chrom_adduct_path}")
             except Exception as e:
                 logger.warning(f"Precursor-adduct chromatogram failed: {e}")
 
         # Total chromatogram (all fragments/adducts summed)
         if enable_total_plots:
-            chrom_total_pdf = os.path.join(images_dir, f"ms2_{glycan}_total.pdf")
+            chrom_total_path = os.path.join(
+                images_dir, f"ms2_{glycan}_total.{figure_filetype}"
+            )
             try:
                 plot_ms2_fragments(csv_path, window=effective_window,
-                                   top_n=None, save_path=chrom_total_pdf,
+                                   top_n=None, save_path=chrom_total_path,
                                    group_col=None,
                                    smoothing_method=smoothing_method)
-                logger.info(f"Saved total chromatogram to {chrom_total_pdf}")
+                logger.info(f"Saved total chromatogram to {chrom_total_path}")
             except Exception as e:
                 logger.warning(f"Total chromatogram failed: {e}")
 
         # averaged spectrum
-        spec_pdf = os.path.join(images_dir, f"ms2_{glycan}_ms2spectrum.pdf")
+        spectrum_path = os.path.join(
+            images_dir, f"ms2_{glycan}_ms2spectrum.{figure_filetype}"
+        )
         try:
             plotMS2spectrum(csv_path, window_minutes=spectrum_window_minutes,
-                            top_n=fragment_top_n, save_path=spec_pdf)
-            logger.info(f"Saved spectrum to {spec_pdf}")
+                            top_n=fragment_top_n, save_path=spectrum_path)
+            logger.info(f"Saved spectrum to {spectrum_path}")
         except Exception as e:
             logger.warning(f"Spectrum plot failed: {e}")
     # 4) AUC
@@ -595,16 +615,18 @@ def process_mzml_pipeline(
             start_rt = float(total_window_df.loc[glycan, 'start_rt'])
             end_rt = float(total_window_df.loc[glycan, 'end_rt'])
             csv_path = os.path.join(output_dir, f"ms2_{glycan}.csv")
-            shaded_pdf = os.path.join(images_dir, f"ms2_{glycan}_total_auc.pdf")
+            shaded_path = os.path.join(
+                images_dir, f"ms2_{glycan}_total_auc.{figure_filetype}"
+            )
             try:
                 plot_total_chromatogram_with_window(
                     csv_path,
                     window=effective_window,
-                    save_path=shaded_pdf,
+                    save_path=shaded_path,
                     start_rt=start_rt,
                     end_rt=end_rt
                 )
-                logger.info(f"Saved total chromatogram with AUC window to {shaded_pdf}")
+                logger.info(f"Saved total chromatogram with AUC window to {shaded_path}")
             except Exception as e:
                 logger.warning(f"Total AUC chromatogram failed: {e}")
 

@@ -32,6 +32,13 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--disable-smoothing", action="store_true")
     parser.add_argument("--rel-height", type=float, default=0.7)
     parser.add_argument("--rel-height-mode", choices=["prominence", "height"], default="prominence")
+    parser.add_argument(
+        "--figure-filetype",
+        type=str.lower,
+        choices=["png", "pdf", "svg"],
+        default="pdf",
+        help="File type for generated pipeline figures (default: pdf)",
+    )
     parser.add_argument("--precursor-db-path")
     parser.add_argument("--structure-db-path")
     parser.add_argument("--skyline-transition", action="store_true")
@@ -74,6 +81,7 @@ def _run_one(args: argparse.Namespace) -> int:
         enable_smoothing=not args.disable_smoothing,
         rel_height=args.rel_height,
         rel_height_mode=args.rel_height_mode,
+        figure_filetype=args.figure_filetype,
         skyline_transition=args.skyline_transition,
         fragment_ion_series=args.fragment_ion_series,
         fragment_max_cleavages=args.fragment_max_cleavages,
@@ -115,6 +123,7 @@ def _run_batch(args: argparse.Namespace) -> int:
         enable_smoothing=not args.disable_smoothing,
         rel_height=args.rel_height,
         rel_height_mode=args.rel_height_mode,
+        figure_filetype=args.figure_filetype,
         skyline_transition=args.skyline_transition,
         precursor_db_path=args.precursor_db_path,
         structure_db_path=args.structure_db_path,

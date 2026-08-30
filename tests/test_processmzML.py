@@ -1,15 +1,30 @@
 import pandas as pd
+import pytest
 
 from glycanPRMQuant.processmzML import (
     _count_precursor_conflicts,
     _filter_ms1_to_resolved_assignments,
     _resolve_precursor_conflicts,
+    normalize_figure_filetype,
     process_mzml_pipeline,
 )
 
 
 def test_process_mzml_pipeline_is_importable():
     assert callable(process_mzml_pipeline)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("png", "png"), ("PDF", "pdf"), (".svg", "svg")],
+)
+def test_normalize_figure_filetype_accepts_supported_formats(value, expected):
+    assert normalize_figure_filetype(value) == expected
+
+
+def test_normalize_figure_filetype_rejects_unsupported_format():
+    with pytest.raises(ValueError, match="png, pdf, svg"):
+        normalize_figure_filetype("jpg")
 
 
 def test_resolve_precursor_conflicts_keeps_best_fragment_evidence():

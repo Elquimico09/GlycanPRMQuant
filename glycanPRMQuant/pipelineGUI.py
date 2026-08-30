@@ -3,6 +3,7 @@ import threading
 import os
 import json
 import time
+from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import scrolledtext
@@ -30,6 +31,8 @@ class PipelineGUI(tk.Tk):
         self._run_started_at = None
         self._run_requested_files = 0
         self._summary_written = False
+        self._log_file_handle = None
+        self._log_file_path = None
         self._prefs_path = os.path.join(os.getcwd(), ".pipeline_gui_prefs.json")
         self._init_style()
         self._build_widgets()
@@ -280,29 +283,41 @@ class PipelineGUI(tk.Tk):
         self.isobaric_resolution_var = tk.BooleanVar(value=True)
         self.target_decoy_var = tk.BooleanVar(value=True)
 
+        ttk.Label(toggles_frame, text="Figure file type").grid(
+            column=0, row=1, sticky="w", padx=8, pady=6
+        )
+        self.figure_filetype = tk.StringVar(value="pdf")
+        ttk.Combobox(
+            toggles_frame,
+            textvariable=self.figure_filetype,
+            values=["png", "pdf", "svg"],
+            state="readonly",
+            width=12,
+        ).grid(column=1, row=1, sticky="w", padx=8, pady=6)
+
         ttk.Checkbutton(toggles_frame, text="Overwrite existing outputs", variable=self.overwrite_var) \
-            .grid(column=0, row=1, columnspan=4, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(toggles_frame, text="Dry run (plan only, no processing)", variable=self.dryrun_var) \
             .grid(column=0, row=2, columnspan=4, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(toggles_frame, text="Generate precursor-adduct chromatograms", variable=self.adduct_plot_var) \
+        ttk.Checkbutton(toggles_frame, text="Dry run (plan only, no processing)", variable=self.dryrun_var) \
             .grid(column=0, row=3, columnspan=4, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(toggles_frame, text="Generate total chromatograms", variable=self.total_plot_var) \
+        ttk.Checkbutton(toggles_frame, text="Generate precursor-adduct chromatograms", variable=self.adduct_plot_var) \
             .grid(column=0, row=4, columnspan=4, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(toggles_frame, text="Skyline Transition list", variable=self.skyline_var) \
+        ttk.Checkbutton(toggles_frame, text="Generate total chromatograms", variable=self.total_plot_var) \
             .grid(column=0, row=5, columnspan=4, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(toggles_frame, text="Enable smoothing", variable=self.smoothing_var) \
+        ttk.Checkbutton(toggles_frame, text="Skyline Transition list", variable=self.skyline_var) \
             .grid(column=0, row=6, columnspan=4, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(toggles_frame, text="Enable smoothing", variable=self.smoothing_var) \
+            .grid(column=0, row=7, columnspan=4, sticky="w", padx=8, pady=4)
         ttk.Checkbutton(
             toggles_frame,
             text="Resolve isobaric precursor conflicts",
             variable=self.isobaric_resolution_var
         ) \
-            .grid(column=0, row=7, columnspan=4, sticky="w", padx=8, pady=4)
+            .grid(column=0, row=8, columnspan=4, sticky="w", padx=8, pady=4)
         ttk.Checkbutton(
             toggles_frame,
             text="Enable target-decoy validation",
             variable=self.target_decoy_var,
-        ).grid(column=0, row=8, columnspan=4, sticky="w", padx=8, pady=4)
+        ).grid(column=0, row=9, columnspan=4, sticky="w", padx=8, pady=4)
         row += 1
 
         # Run and Stop buttons
@@ -398,6 +413,7 @@ class PipelineGUI(tk.Tk):
                 "mz_offset": float(self.mz_offset.get()),
                 "rel_height": float(self.rel_height.get()),
                 "rel_height_mode": self.rel_height_mode.get(),
+                "figure_filetype": self.figure_filetype.get(),
                 "overwrite": bool(self.overwrite_var.get()),
                 "dry_run": bool(self.dryrun_var.get()),
                 "enable_adduct_plots": bool(self.adduct_plot_var.get()),
@@ -451,6 +467,11 @@ class PipelineGUI(tk.Tk):
                 "Parameter error", "Fragment tolerance value must be positive"
             )
             return
+        if params["figure_filetype"] not in {"png", "pdf", "svg"}:
+            messagebox.showerror(
+                "Parameter error", "Figure file type must be png, pdf, or svg"
+            )
+            return
         if params["candidate_min_fragments"] < 1:
             messagebox.showerror("Parameter error", "Minimum candidate fragments must be >= 1")
             return
@@ -472,14 +493,23 @@ class PipelineGUI(tk.Tk):
         database_path = params.pop("database_path")
         params["precursor_db_path"] = database_path
         params["structure_db_path"] = database_path
-        self.status_var.set(f"Running... files={len(params['input_files'])}, workers={params['n_workers']}")
 
         self._save_prefs()
+        self._clear_log()
+        try:
+            self._start_log_file(params["output_root"])
+        except OSError as exc:
+            messagebox.showerror(
+                "Log error",
+                f"Could not create the GUI pipeline log in the output folder:\n{exc}",
+            )
+            return
+        self._append_run_header(params)
+        self.status_var.set(f"Running... files={len(params['input_files'])}, workers={params['n_workers']}")
 
         # disable run, enable stop
         self.run_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
-        self._clear_log()
         self.queue_manager = multiprocessing.Manager()
         self.log_queue = self.queue_manager.Queue()
         self.progress_queue = self.queue_manager.Queue()
@@ -523,6 +553,10 @@ class PipelineGUI(tk.Tk):
             return
         self._drain_queues()
         self._append_completion_summary()
+        if self._log_file_path:
+            self._append_log(f"GUI pipeline log saved to: {self._log_file_path}\n")
+        log_path = self._log_file_path
+        self._close_log_file()
         self.pipeline_proc = None
         if self.queue_manager:
             self.queue_manager.shutdown()
@@ -533,8 +567,16 @@ class PipelineGUI(tk.Tk):
         self.stop_btn.config(state="disabled")
         self._polling = False
         self._process_done = False
-        self.status_var.set("Done")
-        messagebox.showinfo("Done", "Pipeline run finished or stopped.")
+        if log_path:
+            self.status_var.set(f"Done — log saved to {log_path}")
+            messagebox.showinfo(
+                "Done", f"Pipeline run finished or stopped.\n\nLog saved to:\n{log_path}"
+            )
+        else:
+            self.status_var.set("Done — log file could not be saved")
+            messagebox.showwarning(
+                "Done", "Pipeline run finished or stopped, but the log file could not be saved."
+            )
 
     def _poll_log(self):
         if not self._polling and self.pipeline_proc is None:
@@ -574,10 +616,60 @@ class PipelineGUI(tk.Tk):
                 pass
 
     def _append_log(self, msg):
+        msg = str(msg)
+        if self._log_file_handle is not None:
+            try:
+                self._log_file_handle.write(msg)
+                self._log_file_handle.flush()
+            except (OSError, ValueError) as exc:
+                failed_path = self._log_file_path
+                self._close_log_file()
+                self._log_file_path = None
+                msg += (
+                    f"\nERROR: Failed to write GUI pipeline log {failed_path}: {exc}\n"
+                )
         self.log_box.configure(state="normal")
         self.log_box.insert("end", msg)
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
+
+    def _start_log_file(self, output_root):
+        self._close_log_file()
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        stem = f"glycanPRMQuant_pipeline_log_{timestamp}"
+        log_path = os.path.join(output_root, f"{stem}.txt")
+        suffix = 2
+        while os.path.exists(log_path):
+            log_path = os.path.join(output_root, f"{stem}_{suffix}.txt")
+            suffix += 1
+        self._log_file_handle = open(log_path, "w", encoding="utf-8", buffering=1)
+        self._log_file_path = log_path
+
+    def _close_log_file(self):
+        if self._log_file_handle is None:
+            return
+        try:
+            self._log_file_handle.close()
+        finally:
+            self._log_file_handle = None
+
+    def _append_run_header(self, params):
+        started = datetime.now().astimezone().isoformat(timespec="seconds")
+        input_files = params.get("input_files", [])
+        lines = [
+            "glycanPRMQuant GUI pipeline log\n",
+            f"Started: {started}\n",
+            f"Log file: {self._log_file_path}\n",
+            "Input files:\n",
+        ]
+        lines.extend(f"  {path}\n" for path in input_files)
+        lines.append("Parameters:\n")
+        for name in sorted(params):
+            if name in {"input_files", "input_dir"}:
+                continue
+            lines.append(f"  {name}: {params[name]}\n")
+        lines.append("\n")
+        self._append_log("".join(lines))
 
     def _clear_log(self):
         self.log_box.configure(state="normal")
@@ -663,6 +755,7 @@ class PipelineGUI(tk.Tk):
             "mz_offset": self.mz_offset.get(),
             "rel_height": self.rel_height.get(),
             "rel_height_mode": self.rel_height_mode.get(),
+            "figure_filetype": self.figure_filetype.get(),
             "overwrite": self.overwrite_var.get(),
             "dry_run": self.dryrun_var.get(),
             "enable_adduct_plots": self.adduct_plot_var.get(),
@@ -710,6 +803,7 @@ class PipelineGUI(tk.Tk):
             ("mz_offset", self.mz_offset),
             ("rel_height", self.rel_height),
             ("rel_height_mode", self.rel_height_mode),
+            ("figure_filetype", self.figure_filetype),
             ("candidate_min_fragments", self.candidate_min_fragments),
             ("candidate_min_explained_intensity", self.candidate_min_explained_intensity),
             ("candidate_min_score", self.candidate_min_score),

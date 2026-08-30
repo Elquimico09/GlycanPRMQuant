@@ -55,6 +55,7 @@ def _process_one_file(
     candidate_max_q_value: float = 0.05,
     target_decoy_seed: int = 1729,
     fragment_mass_tol_unit: str = "Da",
+    figure_filetype: str = "pdf",
 ):
     """
     Worker wrapper: skips processing if AUC file already exists.
@@ -109,7 +110,8 @@ def _process_one_file(
                 candidate_max_q_value=candidate_max_q_value,
                 target_decoy_seed=target_decoy_seed,
                 precursor_db_path=precursor_db_path,
-                structure_db_path=structure_db_path
+                structure_db_path=structure_db_path,
+                figure_filetype=figure_filetype,
             )
 
         if log_queue is None:
@@ -158,6 +160,7 @@ def run_parallel_pipeline(
     candidate_max_q_value: float = 0.05,
     target_decoy_seed: int = 1729,
     fragment_mass_tol_unit: str = "Da",
+    figure_filetype: str = "pdf",
 ):
     """
     Discover all Thermo .raw or .mzML files in `input_dir` (or use an explicit list) and process them.
@@ -228,6 +231,7 @@ def run_parallel_pipeline(
                     candidate_max_q_value,
                     target_decoy_seed,
                     fragment_mass_tol_unit,
+                    figure_filetype,
                 ): path for path in ms_files
             }
             for fut in as_completed(futures):
