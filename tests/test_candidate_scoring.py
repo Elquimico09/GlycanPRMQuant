@@ -70,6 +70,10 @@ def _permissive_config(**changes):
     return CandidateScoringConfig(**values)
 
 
+def test_default_minimum_explained_intensity_is_one_percent():
+    assert CandidateScoringConfig().minimum_explained_intensity == 0.01
+
+
 def test_repeated_rows_do_not_inflate_candidate_score():
     profile = [10, 50, 100, 50, 10]
     rows = _candidate_rows("25000", [101.0, 201.0], [profile, profile])

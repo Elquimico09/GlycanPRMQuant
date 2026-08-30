@@ -328,7 +328,7 @@ def process_mzml_pipeline(
     structure_db_path: str = None,
     resolve_isobaric_conflicts: bool = True,
     candidate_min_fragments: int = 2,
-    candidate_min_explained_intensity: float = 0.005,
+    candidate_min_explained_intensity: float = 0.01,
     candidate_min_score: float = 35.0,
     candidate_min_evidence_difference: float = 4.0,
     candidate_mass_outlier_min_delta: float = 2.0,

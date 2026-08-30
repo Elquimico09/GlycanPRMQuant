@@ -247,7 +247,7 @@ class PipelineGUI(tk.Tk):
         scoring_frame = section("Candidate Scoring")
         scoring_params = [
             ("Minimum fragments", 2),
-            ("Minimum explained intensity", 0.005),
+            ("Minimum explained intensity", 0.01),
             ("Minimum candidate score", 35.0),
             ("Minimum evidence difference", 4.0),
             ("Mass-outlier minimum Δppm", 2.0),

@@ -91,6 +91,7 @@ def test_run_parser_defaults_to_pdf_figures():
     args = parser.parse_args(["run", "sample.mzML", "out"])
 
     assert args.figure_filetype == "pdf"
+    assert args.candidate_min_explained_intensity == 0.01
 
 
 def test_run_parser_rejects_unsupported_figure_filetype():

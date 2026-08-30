@@ -44,7 +44,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--skyline-transition", action="store_true")
     parser.add_argument("--disable-isobaric-resolution", action="store_true")
     parser.add_argument("--candidate-min-fragments", type=int, default=2)
-    parser.add_argument("--candidate-min-explained-intensity", type=float, default=0.005)
+    parser.add_argument("--candidate-min-explained-intensity", type=float, default=0.01)
     parser.add_argument("--candidate-min-score", type=float, default=35.0)
     parser.add_argument("--candidate-min-evidence-difference", type=float, default=4.0)
     parser.add_argument("--candidate-mass-outlier-min-delta", type=float, default=2.0)

@@ -25,7 +25,7 @@ class CandidateScoringConfig:
     fragment_mass_tolerance_unit: str = "Da"
     fragment_mass_accuracy_reference_ppm: float = 20.0
     minimum_distinct_fragments: int = 2
-    minimum_explained_intensity: float = 0.005
+    minimum_explained_intensity: float = 0.01
     minimum_candidate_score: float = 35.0
     minimum_discriminative_evidence_difference: float = 4.0
     maximum_assignment_q_value: float = 0.05

@@ -549,7 +549,7 @@ it has the largest AUC. Alternative peak groups are retained in audit tables.
 - `candidate_min_fragments`: minimum distinct fragments needed to accept any
   assignment; default `2`.
 - `candidate_min_explained_intensity`: minimum specificity-weighted explained
-  intensity fraction; default `0.005`.
+  intensity fraction; default `0.01` (1%).
 - `candidate_min_score`: minimum bounded candidate score; default `35`.
 - `candidate_min_evidence_difference`: minimum top-minus-runner-up difference
   in discriminative evidence; default `4`. Common-mode evidence does not affect
