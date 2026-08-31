@@ -58,3 +58,34 @@ def test_calculate_feature_auc_keeps_separate_rt_features():
     assert result["peak_rt"].tolist() == [2.0, 12.0]
     assert result["candidate_score"].tolist() == [80.0, 70.0]
     assert (result["AUC"] > 0).all()
+
+
+def test_calculate_feature_auc_reports_reextraction_provenance():
+    df = pd.DataFrame(
+        {
+            "Glycan": ["25000"] * 6,
+            "precursor_cluster": [1] * 6,
+            "rt_feature_id": [2] * 6,
+            "PrecursorAdduct": ["2H"] * 6,
+            "scan_number": [1, 1, 2, 2, 3, 3],
+            "rt": [1.0, 1.0, 2.0, 2.0, 3.0, 3.0],
+            "Fragment": ["Y1", "Y2"] * 3,
+            "fragment_mz": [100.0, 200.0] * 3,
+            "fragment_intensity": [0.0, 0.0, 10.0, 20.0, 0.0, 0.0],
+            "quantification_peak_detected": [False, False, True, True, False, False],
+            "quantification_source": [
+                "unfiltered_accepted_transition_reextraction"
+            ]
+            * 6,
+        }
+    )
+
+    result = calculate_feature_auc(
+        df, smoothing_window=0, rel_height=0.5, rel_height_mode="height"
+    )
+
+    assert result.loc[0, "accepted_transition_count"] == 2
+    assert result.loc[0, "quantification_scan_count"] == 3
+    assert result.loc[0, "quantification_trace_point_count"] == 6
+    assert result.loc[0, "detected_trace_point_count"] == 2
+    assert result.loc[0, "zero_trace_point_count"] == 4

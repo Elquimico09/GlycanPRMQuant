@@ -183,8 +183,19 @@ class PipelineGUI(tk.Tk):
         # General processing controls.
         self.n_workers = add_label_entry("Workers", 2, 1, 0, params_frame)
         self.ppm_ms1_tol = add_label_entry("MS1 ppm tol", 10, 1, 2, params_frame)
-        self.intensity_threshold = add_label_entry(
-            "MS2 intensity", 1e2, 1, 4, params_frame
+        ttk.Label(params_frame, text="MS2 noise filtering").grid(
+            column=4, row=1, sticky="w", padx=8, pady=6
+        )
+        self.ms2_noise_filter_mode = tk.StringVar(value="Automatic")
+        self.ms2_noise_filter_combo = ttk.Combobox(
+            params_frame,
+            textvariable=self.ms2_noise_filter_mode,
+            values=["Automatic", "Off", "Manual"],
+            state="readonly",
+            width=12,
+        )
+        self.ms2_noise_filter_combo.grid(
+            column=5, row=1, padx=8, pady=6, sticky="w"
         )
 
         # Fragment-generation and fragment-matching controls.
@@ -203,15 +214,26 @@ class PipelineGUI(tk.Tk):
             width=12,
         ).grid(column=3, row=2, padx=8, pady=6, sticky="w")
 
-        ttk.Label(params_frame, text="Fragment ion series").grid(
+        ttk.Label(params_frame, text="Manual MS2 intensity").grid(
             column=4, row=2, sticky="w", padx=8, pady=6
+        )
+        self.intensity_threshold = tk.StringVar(value="100")
+        self.intensity_threshold_entry = ttk.Entry(
+            params_frame, textvariable=self.intensity_threshold, width=14
+        )
+        self.intensity_threshold_entry.grid(
+            column=5, row=2, padx=8, pady=6, sticky="w"
+        )
+
+        ttk.Label(params_frame, text="Fragment ion series").grid(
+            column=0, row=3, sticky="w", padx=8, pady=6
         )
         self.fragment_ion_series = tk.StringVar(value="ABCXYZ")
         ttk.Entry(
             params_frame, textvariable=self.fragment_ion_series, width=14
-        ).grid(column=5, row=2, padx=8, pady=6, sticky="w")
+        ).grid(column=1, row=3, padx=8, pady=6, sticky="w")
         self.fragment_max_cleavages = add_label_entry(
-            "Max cleavages", 2, 3, 4, params_frame
+            "Max cleavages", 2, 3, 2, params_frame
         )
 
         # Chromatogram smoothing controls.
@@ -250,13 +272,17 @@ class PipelineGUI(tk.Tk):
             {
                 "Workers": self.n_workers,
                 "MS1 ppm tol": self.ppm_ms1_tol,
-                "MS2 intensity": self.intensity_threshold,
+                "Manual MS2 intensity": self.intensity_threshold,
                 "Fragment tolerance value": self.fragment_mass_tol,
                 "Max cleavages": self.fragment_max_cleavages,
                 "Smoothing window": self.smoothing_window,
                 "AUC rel. height": self.rel_height,
             }
         )
+        self.ms2_noise_filter_combo.bind(
+            "<<ComboboxSelected>>", self._update_noise_filter_controls
+        )
+        self._update_noise_filter_controls()
         row += 1
 
         scoring_frame = section("Candidate Scoring")
@@ -432,6 +458,15 @@ class PipelineGUI(tk.Tk):
                 return
             self.database_path.set(path)
 
+    def _update_noise_filter_controls(self, _event=None):
+        """Enable the absolute threshold only when manual filtering is selected."""
+        state = (
+            "normal"
+            if self.ms2_noise_filter_mode.get().strip().lower() == "manual"
+            else "disabled"
+        )
+        self.intensity_threshold_entry.configure(state=state)
+
     def _on_run(self):
         # gather parameters
         try:
@@ -443,6 +478,7 @@ class PipelineGUI(tk.Tk):
                 "n_workers": int(self.n_workers.get()),
                 "ppm_ms1_tol": float(self.ppm_ms1_tol.get()),
                 "intensity_threshold": float(self.intensity_threshold.get()),
+                "ms2_noise_filter_mode": self.ms2_noise_filter_mode.get().lower(),
                 "fragment_mass_tol": float(self.fragment_mass_tol.get()),
                 "fragment_mass_tol_unit": self.fragment_mass_tol_unit.get(),
                 "fragment_ion_series": self.fragment_ion_series.get(),
@@ -513,6 +549,14 @@ class PipelineGUI(tk.Tk):
             params["n_workers"] = 61
         if params["fragment_max_cleavages"] < 1:
             messagebox.showerror("Parameter error", "Max cleavages must be >= 1")
+            return
+        if (
+            params["ms2_noise_filter_mode"] == "manual"
+            and params["intensity_threshold"] < 0
+        ):
+            messagebox.showerror(
+                "Parameter error", "Manual MS2 intensity cannot be negative"
+            )
             return
         if params["fragment_mass_tol"] <= 0:
             messagebox.showerror(
@@ -807,6 +851,7 @@ class PipelineGUI(tk.Tk):
             "n_workers": self.n_workers.get(),
             "ppm_ms1_tol": self.ppm_ms1_tol.get(),
             "intensity_threshold": self.intensity_threshold.get(),
+            "ms2_noise_filter_mode": self.ms2_noise_filter_mode.get(),
             "fragment_mass_tol": self.fragment_mass_tol.get(),
             "fragment_mass_tol_unit": self.fragment_mass_tol_unit.get(),
             "fragment_ion_series": self.fragment_ion_series.get(),
@@ -854,6 +899,8 @@ class PipelineGUI(tk.Tk):
             self.out_dir.set(prefs["output_root"])
         if "database_path" in prefs:
             self.database_path.set(prefs["database_path"])
+        if "ms2_noise_filter_mode" in prefs:
+            self.ms2_noise_filter_mode.set(prefs["ms2_noise_filter_mode"])
         for key, var in [
             ("n_workers", self.n_workers),
             ("ppm_ms1_tol", self.ppm_ms1_tol),
@@ -883,6 +930,7 @@ class PipelineGUI(tk.Tk):
         ]:
             if key in prefs:
                 var.set(prefs[key])
+        self._update_noise_filter_controls()
         if "overwrite" in prefs:
             self.overwrite_var.set(prefs["overwrite"])
         if "dry_run" in prefs:

@@ -152,14 +152,22 @@ def _build_scan_table(
         ).fillna(0.0)
         if "precursor_intensity" not in raw.columns:
             raw["precursor_intensity"] = 0.0
-        scans = (
-            raw.groupby(["scan_number", "rt", "precursor_mz"], dropna=False)
-            .agg(
-                precursor_intensity=("precursor_intensity", "max"),
-                ms2_tic=("fragment_intensity", "sum"),
-            )
-            .reset_index()
-        )
+        aggregation = {
+            "precursor_intensity": ("precursor_intensity", "max"),
+            "ms2_tic": (
+                "denoised_ms2_tic"
+                if "denoised_ms2_tic" in raw.columns
+                else "fragment_intensity",
+                "max" if "denoised_ms2_tic" in raw.columns else "sum",
+            ),
+        }
+        if "raw_ms2_tic" in raw.columns:
+            aggregation["raw_ms2_tic"] = ("raw_ms2_tic", "max")
+        scans = raw.groupby(
+            ["scan_number", "rt", "precursor_mz"], dropna=False
+        ).agg(**aggregation).reset_index()
+        if "raw_ms2_tic" not in scans.columns:
+            scans["raw_ms2_tic"] = scans["ms2_tic"]
     else:
         fallback = work.copy()
         if "scan_number" not in fallback.columns:
@@ -176,6 +184,7 @@ def _build_scan_table(
             )
             .reset_index()
         )
+        scans["raw_ms2_tic"] = scans["ms2_tic"]
 
     combined = pd.concat(
         [

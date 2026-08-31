@@ -11,7 +11,21 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ppm-ms1-tol", type=float, default=10)
     parser.add_argument("--mz-offset", type=float, default=0.0)
     parser.add_argument("--mass-offset", type=float, default=0.0)
-    parser.add_argument("--intensity-threshold", type=float, default=1e2)
+    parser.add_argument(
+        "--ms2-noise-filter-mode",
+        choices=["auto", "off", "manual"],
+        default="auto",
+        help=(
+            "MS2 centroid noise filtering mode (default: auto). Manual mode "
+            "uses --intensity-threshold."
+        ),
+    )
+    parser.add_argument(
+        "--intensity-threshold",
+        type=float,
+        default=1e2,
+        help="Minimum MS2 centroid intensity used only in manual noise mode",
+    )
     parser.add_argument(
         "--fragment-mass-tol",
         type=float,
@@ -74,6 +88,7 @@ def _run_one(args: argparse.Namespace) -> int:
         mz_offset=args.mz_offset,
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,
+        ms2_noise_filter_mode=args.ms2_noise_filter_mode,
         fragment_mass_tol=args.fragment_mass_tol,
         fragment_mass_tol_unit=args.fragment_mass_tol_unit,
         smoothing_window=args.smoothing_window,
@@ -114,6 +129,7 @@ def _run_batch(args: argparse.Namespace) -> int:
         mz_offset=args.mz_offset,
         mass_offset=args.mass_offset,
         intensity_threshold=args.intensity_threshold,
+        ms2_noise_filter_mode=args.ms2_noise_filter_mode,
         fragment_mass_tol=args.fragment_mass_tol,
         fragment_mass_tol_unit=args.fragment_mass_tol_unit,
         fragment_ion_series=args.fragment_ion_series,

@@ -320,6 +320,14 @@ def calculate_feature_auc(
         "assignment_q_value",
         "target_decoy_score_margin",
         "target_decoy_pass",
+        "quantification_source",
+    ]
+    quantification_summary_columns = [
+        "accepted_transition_count",
+        "quantification_scan_count",
+        "quantification_trace_point_count",
+        "detected_trace_point_count",
+        "zero_trace_point_count",
     ]
     rows = []
     for keys, feature_data in df.groupby(grouping_columns, dropna=False):
@@ -343,6 +351,33 @@ def calculate_feature_auc(
             values = feature_data[column].dropna()
             metadata[column] = values.iloc[0] if not values.empty else np.nan
 
+        metadata["quantification_scan_count"] = int(
+            feature_data["scan_number"].nunique()
+        )
+        metadata["quantification_trace_point_count"] = int(len(feature_data))
+        theoretical_column = next(
+            (
+                column
+                for column in ("theoretical_fragment_mz", "fragment_mz")
+                if column in feature_data.columns
+            ),
+            None,
+        )
+        if theoretical_column is not None:
+            transition_columns = [theoretical_column]
+            transition_columns.extend(
+                column
+                for column in ("Fragment", "Charge", "Adduct")
+                if column in feature_data.columns
+            )
+            metadata["accepted_transition_count"] = int(
+                feature_data[transition_columns].drop_duplicates().shape[0]
+            )
+        if "quantification_peak_detected" in feature_data.columns:
+            detected = feature_data["quantification_peak_detected"].fillna(False).astype(bool)
+            metadata["detected_trace_point_count"] = int(detected.sum())
+            metadata["zero_trace_point_count"] = int((~detected).sum())
+
         for result in per_adduct.to_dict("records"):
             rows.append({**metadata, **result})
 
@@ -351,5 +386,6 @@ def calculate_feature_auc(
             columns=grouping_columns
             + [adduct_col, "peak_rt", "start_rt", "end_rt", "AUC"]
             + audit_columns
+            + quantification_summary_columns
         )
     return pd.DataFrame(rows)

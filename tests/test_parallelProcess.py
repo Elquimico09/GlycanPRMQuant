@@ -64,6 +64,42 @@ def test_run_parallel_pipeline_forwards_figure_filetype(tmp_path, monkeypatch):
     assert submitted_args[0][-1] == "svg"
 
 
+def test_run_parallel_pipeline_forwards_noise_filter_mode(tmp_path, monkeypatch):
+    input_file = tmp_path / "sample.mzML"
+    input_file.write_text("", encoding="utf-8")
+    submitted_args = []
+
+    class FinishedFuture:
+        def result(self):
+            return "sample", "done", None
+
+    class RecordingExecutor:
+        def __init__(self, max_workers):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def submit(self, function, *args):
+            submitted_args.append(args)
+            return FinishedFuture()
+
+    monkeypatch.setattr(parallel_process, "ProcessPoolExecutor", RecordingExecutor)
+    monkeypatch.setattr(parallel_process, "as_completed", lambda futures: futures)
+
+    run_parallel_pipeline(
+        input_files=[str(input_file)],
+        output_root=str(tmp_path / "out"),
+        ms2_noise_filter_mode="manual",
+        intensity_threshold=250.0,
+    )
+
+    assert submitted_args[0][3:5] == (250.0, "manual")
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

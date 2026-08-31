@@ -5,9 +5,39 @@ import pytest
 from glycanPRMQuant.candidate_scoring import (
     CandidateScoringConfig,
     _apply_target_decoy_statistics,
+    _build_scan_table,
     _finalize_candidate_scores,
     score_and_resolve_candidates,
 )
+
+
+def test_scan_table_uses_denoised_tic_and_preserves_raw_tic():
+    matched = pd.DataFrame(
+        {
+            "scan_number": [1],
+            "rt": [5.0],
+            "precursor_mz": [500.0],
+            "Glycan": ["25000"],
+            "fragment_intensity": [50.0],
+        }
+    )
+    scan_data = pd.DataFrame(
+        {
+            "scan_number": [1, 1],
+            "rt": [5.0, 5.0],
+            "precursor_mz": [500.0, 500.0],
+            "fragment_intensity": [20.0, 30.0],
+            "denoised_ms2_tic": [50.0, 50.0],
+            "raw_ms2_tic": [1000.0, 1000.0],
+        }
+    )
+
+    _, scans = _build_scan_table(
+        matched, scan_data, CandidateScoringConfig()
+    )
+
+    assert scans.loc[0, "ms2_tic"] == 50.0
+    assert scans.loc[0, "raw_ms2_tic"] == 1000.0
 
 
 def _scan_table(profile):

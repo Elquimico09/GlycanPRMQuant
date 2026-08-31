@@ -92,6 +92,26 @@ def test_run_parser_defaults_to_pdf_figures():
 
     assert args.figure_filetype == "pdf"
     assert args.candidate_min_explained_intensity == 0.01
+    assert args.ms2_noise_filter_mode == "auto"
+
+
+def test_run_parser_accepts_manual_ms2_noise_filtering():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "run",
+            "sample.mzML",
+            "out",
+            "--ms2-noise-filter-mode",
+            "manual",
+            "--intensity-threshold",
+            "250",
+        ]
+    )
+
+    assert args.ms2_noise_filter_mode == "manual"
+    assert args.intensity_threshold == 250.0
 
 
 def test_run_parser_rejects_unsupported_figure_filetype():

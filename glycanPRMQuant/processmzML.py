@@ -4,6 +4,11 @@ import pandas as pd
 import numpy as np
 
 from glycanPRMQuant.spectra import extract_ms2
+from glycanPRMQuant.noise_filter import (
+    filter_ms2_noise,
+    normalize_noise_filter_mode,
+)
+from glycanPRMQuant.quantification import reextract_accepted_transitions
 from glycanPRMQuant.matchMS1     import matchMS1
 from glycanPRMQuant.matchMS2     import matchMS2
 from glycanPRMQuant.calculateAUC import calculateAUC, calculate_feature_auc
@@ -337,8 +342,10 @@ def process_mzml_pipeline(
     target_decoy_seed: int = 1729,
     fragment_mass_tol_unit: str = "Da",
     figure_filetype: str = "pdf",
+    ms2_noise_filter_mode: str = "auto",
 ):
     figure_filetype = normalize_figure_filetype(figure_filetype)
+    ms2_noise_filter_mode = normalize_noise_filter_mode(ms2_noise_filter_mode)
     base_name = os.path.splitext(os.path.basename(mzml_file))[0]
     os.makedirs(output_dir, exist_ok=True)
     images_dir = os.path.join(output_dir, 'images')
@@ -354,16 +361,40 @@ def process_mzml_pipeline(
         fragment_mass_tol_unit,
     )
     logger.info("Figure file type: %s", figure_filetype)
+    logger.info(
+        "MS2 noise filtering: %s%s",
+        ms2_noise_filter_mode,
+        (
+            f" (manual threshold {intensity_threshold:g})"
+            if ms2_noise_filter_mode == "manual"
+            else ""
+        ),
+    )
 
-    # 1) Extract MS2
+    # 1) Extract all positive MS2 centroids, then estimate/filter noise. Keep
+    # precursor discovery independent of fragment filtering so a scan is not
+    # lost merely because none of its product ions passes the noise floor.
     logger.info("Extracting MS2 data from %s", mzml_file)
-    ms2_data = extract_ms2(mzml_file, min_intensity=intensity_threshold)
-    logger.info(f"Extracted {len(ms2_data)} points")
+    raw_ms2_data = extract_ms2(mzml_file, min_intensity=0.0)
+    noise_result = filter_ms2_noise(
+        raw_ms2_data,
+        mode=ms2_noise_filter_mode,
+        manual_threshold=intensity_threshold,
+    )
+    ms2_data = noise_result.peaks
+    noise_audit_path = os.path.join(output_dir, "ms2_noise_filter_audit.csv")
+    noise_result.audit.to_csv(noise_audit_path, index=False)
+    logger.info(
+        "MS2 noise filtering retained %d of %d positive centroid peaks; audit=%s",
+        len(ms2_data),
+        len(raw_ms2_data),
+        noise_audit_path,
+    )
 
     # 2) Match MS1
     logger.info("Matching MS1 precursors…")
     ms1_results = matchMS1(
-        ms2_data,
+        raw_ms2_data,
         ppm_tol=ppm_ms1_tol,
         mz_offset=mz_offset,
         mass_offset=mass_offset,
@@ -409,7 +440,8 @@ def process_mzml_pipeline(
             precursor_composition=glycan,
             ppm_tol=ppm_ms1_tol,
             fragment_mass_tol=fragment_mass_tol,
-            intensity_threshold=intensity_threshold,
+            # Noise filtering has already been applied consistently above.
+            intensity_threshold=0.0,
             ion_series=fragment_ion_series,
             max_cleavages=fragment_max_cleavages,
             db_path=structure_db_path,
@@ -515,11 +547,51 @@ def process_mzml_pipeline(
     ms1_resolved.to_csv(ms1_resolved_out, index=False)
     logger.info(f"Wrote {len(ms1_resolved)} resolved MS1 matches to {ms1_resolved_out}")
 
-    # 4) For each glycan after conflict resolution: save CSV, plot
-    for glycan, sub in all_df.groupby('Glycan'):
+    # Preserve the denoised rows that established identification, then rebuild
+    # accepted transition traces from unfiltered centroid intensities for all
+    # plotting and quantification operations.
+    identification_path = os.path.join(
+        output_dir, "selected_identification_fragment_matches.csv"
+    )
+    all_df.to_csv(identification_path, index=False)
+    logger.info(
+        "Wrote %d denoised selected identification row(s) to %s",
+        len(all_df),
+        identification_path,
+    )
+    quantification_result = reextract_accepted_transitions(
+        all_df,
+        raw_ms2_data,
+        fragment_mass_tolerance=fragment_mass_tol,
+        fragment_mass_tolerance_unit=fragment_mass_tol_unit,
+        precursor_ppm_tolerance=ppm_ms1_tol,
+    )
+    quant_df = quantification_result.peaks
+    quantification_audit_path = os.path.join(
+        output_dir, "quantification_reextraction_audit.csv"
+    )
+    quantification_result.audit.to_csv(quantification_audit_path, index=False)
+    transition_library_path = os.path.join(
+        output_dir, "quantification_transition_library.csv"
+    )
+    quantification_result.transitions.to_csv(transition_library_path, index=False)
+    logger.info(
+        "Re-extracted %d raw accepted-transition trace row(s) from %d accepted "
+        "transition(s); audit=%s",
+        len(quant_df),
+        len(quantification_result.transitions),
+        quantification_audit_path,
+    )
+
+    # 4) For each accepted glycan: save raw re-extracted traces and plot.
+    for glycan, sub in quant_df.groupby('Glycan'):
         csv_path = os.path.join(output_dir, f"ms2_{glycan}.csv")
         sub.to_csv(csv_path, index=False)
-        logger.info(f"Wrote {len(sub)} MS2 matches to {csv_path}")
+        logger.info(
+            "Wrote %d unfiltered accepted-transition trace row(s) to %s",
+            len(sub),
+            csv_path,
+        )
 
         # Chromatograms per fragment (legacy view)
         chrom_frag_path = os.path.join(images_dir, f"ms2_{glycan}.{figure_filetype}")
@@ -573,10 +645,10 @@ def process_mzml_pipeline(
         except Exception as e:
             logger.warning(f"Spectrum plot failed: {e}")
     # 4) AUC
-    if not all_df.empty:
-        logger.info("Calculating AUC...")
+    if not quant_df.empty:
+        logger.info("Calculating AUC from unfiltered accepted-transition traces...")
         per_adduct_df, total_df = calculateAUC(
-            all_df,
+            quant_df,
             smoothing_window=effective_window,
             smoothing_method=smoothing_method,
             adduct_col='PrecursorAdduct',
@@ -595,7 +667,7 @@ def process_mzml_pipeline(
         logger.info(f"Wrote per-adduct AUC values to {auc_adduct_path}")
 
         feature_auc_df = calculate_feature_auc(
-            all_df,
+            quant_df,
             smoothing_window=effective_window,
             smoothing_method=smoothing_method,
             adduct_col="PrecursorAdduct",
@@ -614,7 +686,7 @@ def process_mzml_pipeline(
 
         # Compute total-window boundaries for shaded AUC plots
         total_window_df = _compute_total_window_boundaries(
-            all_df,
+            quant_df,
             smoothing_window=effective_window,
             smoothing_method=smoothing_method,
             rel_height=rel_height,
@@ -626,8 +698,8 @@ def process_mzml_pipeline(
             total_window_df = pd.DataFrame(columns=['peak_rt', 'start_rt', 'end_rt', 'AUC'])
 
     # 5) Total chromatogram with AUC window shading
-    if not all_df.empty:
-        for glycan, sub in all_df.groupby('Glycan'):
+    if not quant_df.empty:
+        for glycan, sub in quant_df.groupby('Glycan'):
             if glycan not in total_window_df.index:
                 continue
             start_rt = float(total_window_df.loc[glycan, 'start_rt'])
@@ -649,16 +721,16 @@ def process_mzml_pipeline(
                 logger.warning(f"Total AUC chromatogram failed: {e}")
 
     # 6) Skyline transition export (unique fragments, apex RT per glycan)
-    if skyline_transition and not all_df.empty:
-        apex_rt = _compute_glycan_apex_rt(all_df, effective_window, smoothing_method)
-        charge = all_df['PrecursorAdduct'].map(adduct_charge).fillna(0).astype(int)
+    if skyline_transition and not quant_df.empty:
+        apex_rt = _compute_glycan_apex_rt(quant_df, effective_window, smoothing_method)
+        charge = quant_df['PrecursorAdduct'].map(adduct_charge).fillna(0).astype(int)
         trans_df = pd.DataFrame({
-            'Glycan': all_df['Glycan'],
-            'Adduct': all_df['PrecursorAdduct'],
-            'Precursor m/z': all_df['precursor_mz'],
+            'Glycan': quant_df['Glycan'],
+            'Adduct': quant_df['PrecursorAdduct'],
+            'Precursor m/z': quant_df['precursor_mz'],
             'Precursor charge': charge,
-            'Fragment m/z': all_df['fragment_mz'],
-            'Fragment charge': all_df['Charge'],
+            'Fragment m/z': quant_df['fragment_mz'],
+            'Fragment charge': quant_df['Charge'],
         })
         trans_df = trans_df.drop_duplicates(subset=[
             'Glycan', 'Adduct', 'Precursor m/z', 'Precursor charge', 'Fragment m/z', 'Fragment charge'

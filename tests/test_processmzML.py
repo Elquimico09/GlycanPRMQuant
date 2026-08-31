@@ -1,6 +1,8 @@
 import pandas as pd
 import pytest
 
+import glycanPRMQuant.processmzML as process_module
+
 from glycanPRMQuant.processmzML import (
     _count_precursor_conflicts,
     _filter_ms1_to_resolved_assignments,
@@ -12,6 +14,39 @@ from glycanPRMQuant.processmzML import (
 
 def test_process_mzml_pipeline_is_importable():
     assert callable(process_mzml_pipeline)
+
+
+def test_pipeline_filters_fragments_but_matches_precursors_from_raw_scans(
+    tmp_path, monkeypatch
+):
+    raw = pd.DataFrame(
+        {
+            "scan_number": [1] * 20,
+            "rt": [5.0] * 20,
+            "precursor_mz": [700.0] * 20,
+            "fragment_mz": list(range(100, 120)),
+            "precursor_intensity": [1000.0] * 20,
+            "fragment_intensity": [10.0] * 18 + [100.0, 200.0],
+        }
+    )
+    observed = {}
+
+    monkeypatch.setattr(process_module, "extract_ms2", lambda *args, **kwargs: raw)
+
+    def fake_match_ms1(data, **kwargs):
+        observed["match_ms1_rows"] = len(data)
+        return pd.DataFrame(columns=["precursor_mz", "Glycan", "Adduct"])
+
+    monkeypatch.setattr(process_module, "matchMS1", fake_match_ms1)
+
+    process_mzml_pipeline(
+        "sample.mzML", str(tmp_path), ms2_noise_filter_mode="auto"
+    )
+
+    assert observed["match_ms1_rows"] == 20
+    audit = pd.read_csv(tmp_path / "ms2_noise_filter_audit.csv")
+    assert audit.loc[0, "raw_peak_count"] == 20
+    assert audit.loc[0, "retained_peak_count"] == 2
 
 
 @pytest.mark.parametrize(

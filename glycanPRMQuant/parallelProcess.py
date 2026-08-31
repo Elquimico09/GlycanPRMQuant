@@ -4,6 +4,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from glycanPRMQuant.consolidateAUC import consolidate_auc_results
 from glycanPRMQuant.logging_utils import configure_logging
+from glycanPRMQuant.noise_filter import normalize_noise_filter_mode
 from glycanPRMQuant.retention_alignment import consolidate_consensus_peak_results
 from glycanPRMQuant.spectra import SUPPORTED_SUFFIXES, validate_input_file_types
 
@@ -28,6 +29,7 @@ def _process_one_file(
     output_root: str,
     ppm_ms1_tol: float,
     intensity_threshold: float,
+    ms2_noise_filter_mode: str,
     fragment_mass_tol: float,
     fragment_ion_series: str,
     fragment_max_cleavages: int,
@@ -93,6 +95,7 @@ def _process_one_file(
                 output_dir=out_dir,
                 ppm_ms1_tol=ppm_ms1_tol,
                 intensity_threshold=intensity_threshold,
+                ms2_noise_filter_mode=ms2_noise_filter_mode,
                 fragment_mass_tol=fragment_mass_tol,
                 fragment_mass_tol_unit=fragment_mass_tol_unit,
                 fragment_ion_series=fragment_ion_series,
@@ -171,6 +174,7 @@ def run_parallel_pipeline(
     enable_consensus_peak_selection: bool = True,
     consensus_rt_tolerance: float = 0.3,
     consensus_min_replicate_fraction: float = 0.8,
+    ms2_noise_filter_mode: str = "auto",
 ):
     """
     Discover all Thermo .raw or .mzML files in `input_dir` (or use an explicit list) and process them.
@@ -180,6 +184,9 @@ def run_parallel_pipeline(
     """
     if output_root is None:
         raise ValueError("output_root must be provided")
+    ms2_noise_filter_mode = normalize_noise_filter_mode(ms2_noise_filter_mode)
+    if ms2_noise_filter_mode == "manual" and intensity_threshold < 0:
+        raise ValueError("Manual MS2 intensity threshold cannot be negative")
     if consensus_rt_tolerance <= 0:
         raise ValueError("Consensus RT tolerance must be positive")
     if not 0 < consensus_min_replicate_fraction <= 1:
@@ -223,6 +230,7 @@ def run_parallel_pipeline(
                     output_root,
                     ppm_ms1_tol,
                     intensity_threshold,
+                    ms2_noise_filter_mode,
                     fragment_mass_tol,
                     fragment_ion_series,
                     fragment_max_cleavages,
