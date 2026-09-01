@@ -61,6 +61,21 @@ ms1_results.csv
 ms1_results_resolved.csv
 ms2_*.csv
 *_skyline_transitions.xlsx
+# Pipeline audit and target-decoy tables (when written outside output/ or results/)
+ms2_noise_filter_audit.csv
+candidate_scores.csv
+decoy_candidate_scores.csv
+decoy_fragment_matches.csv
+target_decoy_competitions.csv
+candidate_rows_not_quantified.csv
+selected_identification_fragment_matches.csv
+quantification_reextraction_audit.csv
+quantification_transition_library.csv
+# Cross-run retention-time alignment output
+aligned_feature_auc_values.csv
+consensus_peak_groups.csv
+combined_all_feature_auc_values.csv
+retention_time_alignment.csv
 
 # Logs and temporary files
 *.log

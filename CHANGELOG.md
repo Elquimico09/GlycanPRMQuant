@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.3.0 - 2026-09-01
+
+- Added target-decoy candidate scoring and reporting.
+- Added MS2 noise detection and filtering.
+- Added retention-time alignment and consensus feature quantification across runs.
+- Added the interior-apex rule for excluding decaying signal windows.
+- Improved GUI usability and automated analysis-directory generation.
+
 ## v1.2.1 - 2026-07-08
 
 - Added CLI and GUI controls to enable or disable MS2-based isobaric precursor conflict resolution.
