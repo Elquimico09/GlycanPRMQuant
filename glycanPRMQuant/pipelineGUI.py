@@ -31,7 +31,7 @@ def _ensure_output_directory(path: str) -> str:
 class PipelineGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("glycanPRMQuant Parallel Pipeline")
+        self.title("GlycanPRMQuant Parallel Pipeline")
         self.geometry("980x1080")
         self.configure(bg="#0f172a")
         self.pipeline_proc = None
@@ -123,7 +123,7 @@ class PipelineGUI(tk.Tk):
 
         header = ttk.Frame(self.inner, style="TFrame")
         header.grid(column=0, row=row, columnspan=4, sticky="ew", padx=18, pady=(16, 6))
-        ttk.Label(header, text="glycanPRMQuant Pipeline", style="Title.TLabel").grid(column=0, row=0, sticky="w")
+        ttk.Label(header, text="GlycanPRMQuant Pipeline", style="Title.TLabel").grid(column=0, row=0, sticky="w")
         ttk.Label(header, text="Parallel processing for PRM glycan quantification", style="Muted.TLabel") \
             .grid(column=0, row=1, sticky="w")
         row += 1
@@ -742,7 +742,7 @@ class PipelineGUI(tk.Tk):
     def _start_log_file(self, output_root):
         self._close_log_file()
         timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-        stem = f"glycanPRMQuant_pipeline_log_{timestamp}"
+        stem = f"GlycanPRMQuant_pipeline_log_{timestamp}"
         log_path = os.path.join(output_root, f"{stem}.txt")
         suffix = 2
         while os.path.exists(log_path):
@@ -763,7 +763,7 @@ class PipelineGUI(tk.Tk):
         started = datetime.now().astimezone().isoformat(timespec="seconds")
         input_files = params.get("input_files", [])
         lines = [
-            "glycanPRMQuant GUI pipeline log\n",
+            "GlycanPRMQuant GUI pipeline log\n",
             f"Started: {started}\n",
             f"Log file: {self._log_file_path}\n",
             "Input files:\n",

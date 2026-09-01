@@ -1,4 +1,4 @@
-"""Command-line interface for glycanPRMQuant."""
+"""Command-line interface for GlycanPRMQuant."""
 
 import argparse
 import logging

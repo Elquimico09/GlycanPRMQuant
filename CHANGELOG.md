@@ -19,7 +19,7 @@
 
 ## v1.2.0 - 2026-05-12
 
-- Published `glycanPRMQuant` on PyPI.
+- Published `GlycanPRMQuant` on PyPI.
 - Added modern `pyproject.toml` packaging metadata and package data handling.
 - Bundled `N_glycan_db.csv` inside the Python package for installed builds.
 - Removed legacy precursor and fragment database files from the root `database/` directory.

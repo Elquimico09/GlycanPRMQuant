@@ -1,5 +1,5 @@
 """
-Shared constants for glycanPRMQuant package.
+Shared constants for the GlycanPRMQuant package.
 
 This module contains all physical and chemical constants used throughout
 the package to ensure consistency across modules.

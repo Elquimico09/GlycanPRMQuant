@@ -1,5 +1,5 @@
 """
-glycanPRMQuant: A package for glycan PRM (Parallel Reaction Monitoring) quantification.
+GlycanPRMQuant: A package for glycan PRM (Parallel Reaction Monitoring) quantification.
 
 This package provides tools for processing mass spectrometry data of glycans,
 including MS1/MS2 matching, fragmentation analysis, and quantification.

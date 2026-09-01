@@ -1,17 +1,17 @@
 <p align="center">
-  <img src="GPQ%20Logo.png" alt="glycanPRMQuant logo" width="560">
+  <img src="GPQ%20Logo.png" alt="GlycanPRMQuant logo" width="560">
 </p>
 
-# glycanPRMQuant
+# GlycanPRMQuant
 
 <p align="center">
-  <a href="https://pypi.org/project/glycanPRMQuant/"><img src="https://img.shields.io/pypi/v/glycanPRMQuant.svg" alt="PyPI version"></a>
-  <a href="https://pypi.org/project/glycanPRMQuant/"><img src="https://img.shields.io/pypi/pyversions/glycanPRMQuant.svg" alt="Python versions"></a>
+  <a href="https://pypi.org/project/GlycanPRMQuant/"><img src="https://img.shields.io/pypi/v/GlycanPRMQuant.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/GlycanPRMQuant/"><img src="https://img.shields.io/pypi/pyversions/GlycanPRMQuant.svg" alt="Python versions"></a>
   <a href="https://github.com/Elquimico09/GlycanPRMQuant"><img src="https://img.shields.io/github/stars/Elquimico09/GlycanPRMQuant?style=social" alt="GitHub stars"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT license"></a>
 </p>
 
-`glycanPRMQuant` is a Python package for targeted PRM glycomics analysis from
+`GlycanPRMQuant` is a Python package for targeted PRM glycomics analysis from
 Thermo `.raw` or `.mzML` data. It extracts MS2 spectra, matches precursor ions to N-glycan
 compositions, generates theoretical fragments from IUPAC structures, resolves
 likely structures, plots chromatograms/spectra, and quantifies glycan signal by
@@ -87,7 +87,7 @@ Install from PyPi:
 
 ```bash
 python -m pip install --upgrade pip
-pip install glycanprmquant
+pip install GlycanPRMQuant
 ```
 
 Check the command-line entry point and bundled database:
