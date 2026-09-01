@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="GPQ%20Logo.png" alt="glycanPRMQuant logo" width="560">
+  <img src="GPQ%20Logo.jpeg" alt="glycanPRMQuant logo" width="560">
 </p>
 
 # glycanPRMQuant
