@@ -33,7 +33,7 @@ def plot_glycan_intensity_boxplot(consolidated_csv: str,
     
     # Plot
     plt.figure(figsize=(4.8, 4))
-    plt.boxplot(data, labels=samples, showfliers=False)
+    plt.boxplot(data, tick_labels=samples, showfliers=False)
     plt.ylabel('Glycan Abundance', fontsize=14)
     plt.title('Distribution of Glycan Abundance per Sample')
     plt.xticks(rotation=45, ha='right', fontsize = 12)
