@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
   "alpharaw>=0.7",
-  "numpy",
+  "numpy>=2.0",
   "pandas",
   "scipy",
   "matplotlib",

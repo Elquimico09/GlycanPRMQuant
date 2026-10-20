@@ -122,7 +122,7 @@ On Windows, activate the environment with:
 Installed from `pyproject.toml`:
 
 - `alpharaw`
-- `numpy`
+- `numpy>=2.0`
 - `pandas`
 - `scipy`
 - `matplotlib`

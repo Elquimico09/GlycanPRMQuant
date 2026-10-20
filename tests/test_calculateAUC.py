@@ -1,6 +1,31 @@
 import pandas as pd
+import numpy as np
+import pytest
 
 from glycanPRMQuant.calculateAUC import calculateAUC, calculate_feature_auc
+
+
+@pytest.mark.parametrize("api_name", ["trapz", "trapezoid"])
+def test_calculate_auc_supports_numpy_integration_apis(monkeypatch, api_name):
+    integrate = getattr(np, "trapezoid", None)
+    if integrate is None:
+        integrate = np.trapz
+    monkeypatch.setattr(np, api_name, integrate, raising=False)
+    other_api = "trapezoid" if api_name == "trapz" else "trapz"
+    monkeypatch.delattr(np, other_api, raising=False)
+    df = pd.DataFrame({
+        "Glycan": ["25000"] * 3,
+        "scan_number": [1, 2, 3],
+        "rt": [0.0, 1.0, 2.0],
+        "fragment_intensity": [0.0, 10.0, 0.0],
+    })
+
+    per_adduct, total = calculateAUC(
+        df, smoothing_window=0, rel_height=0.5, rel_height_mode="height"
+    )
+
+    assert per_adduct.loc[0, "AUC"] == pytest.approx(7.5)
+    assert total.loc[0, "AUC"] == pytest.approx(7.5)
 
 
 def test_calculate_auc_returns_per_adduct_and_total_tables():

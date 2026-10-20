@@ -218,7 +218,11 @@ def calculateAUC(
         interior_mask = (x > start_rt) & (x < end_rt)
         x_auc = np.concatenate(([start_rt], x[interior_mask], [end_rt]))
         y_auc = np.interp(x_auc, x, y_smooth)
-        auc = np.trapezoid(y_auc, x_auc)
+        # Support older NumPy releases that expose this operation as trapz.
+        integrate = getattr(np, "trapezoid", None)
+        if integrate is None:
+            integrate = np.trapz
+        auc = integrate(y_auc, x_auc)
 
         logger.info(
             f"Glycan {glycan!r}: peak RT={peak_rt:.2f}, "
